@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="de" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>OPERATION SPECTER | Precision Grid</title>
+    <meta name="timestamp" content="2026-03-11T20:45:00Z">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+        
+        :root {
+            --bg-void: #000000;
+            --bg-deep: #020408;
+            --cyan: #00d4ff;
+            --cyan-dim: rgba(0, 212, 255, 0.2);
+            --matrix-green: #00ff41;
+            --matrix-glow: rgba(0, 255, 65, 0.4);
+            --alert-red: #ff0040;
+            --signal-white: #e0f7ff;
+            --signal-dim: #5a6b7b;
+            --watermark-fade: rgba(0, 255, 65, 0.03);
+            --gm-overlay-bg: rgba(0, 0, 0, 0.95);
+        }
+
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-void);
+            color: var(--signal-white);
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            font-size: 14px;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+
+        .watermark-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .watermark-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 8vw;
+            font-weight: 700;
+            color: var(--watermark-fade);
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            letter-spacing: 2vw;
+            transform: rotate(180deg);
+            text-shadow: 0 0 30px rgba(0, 255, 65, 0.1);
+            user-select: none;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .watermark-timestamp {
+            position: fixed;
+            bottom: 80px;
+            right: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            color: var(--watermark-fade);
+            transform: rotate(-90deg);
+            transform-origin: right bottom;
+            letter-spacing: 2px;
+            z-index: 9999;
+            pointer-events: none;
+        }
+
+        .scanner-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.15;
+            background: linear-gradient(180deg, transparent 0%, rgba(0, 212, 255, 0.03) 50%, transparent 100%);
+            animation: scan 8s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
+        }
+
+        .command-interface {
+            position: relative;
+            z-index: 10;
+            display: grid;
+            grid-template-rows: 50px 1fr 70px;
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        .status-header {
+            grid-row: 1;
+            background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, transparent 100%);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-family: 'JetBrains Mono', monospace;
+            z-index: 100;
+        }
+
+        .grid-status {
+            font-size: 0.75rem;
+            color: var(--signal-dim);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .grid-status.active {
+            opacity: 1;
+            color: var(--matrix-green);
+            text-shadow: 0 0 10px var(--matrix-green);
+        }
+
+        .grid-status.gm-active {
+            color: var(--alert-red);
+            text-shadow: 0 0 10px rgba(255, 0, 64, 0.5);
+            animation: pulse-red 2s infinite;
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--matrix-green);
+            box-shadow: 0 0 10px var(--matrix-green);
+            animation: heartbeat 2s infinite;
+        }
+
+        .pulse-dot.gm-mode {
+            background: var(--alert-red);
+            box-shadow: 0 0 10px var(--alert-red);
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.3; transform: scale(0.8); }
+        }
+
+        .map-zone {
+            grid-row: 2;
+            position: relative;
+            overflow: hidden;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: var(--bg-deep);
+            z-index: 5;
+        }
+
+        #gridCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 15;
+            opacity: 0;
+            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            will-change: opacity;
+        }
+
+        #gridCanvas.visible {
+            opacity: 1;
+        }
+
+        /* Google Maps Overlay für aktiven Sektor */
+        .gm-sector-overlay {
+            position: absolute;
+            border: 2px solid var(--alert-red);
+            background: var(--gm-overlay-bg);
+            z-index: 100;
+            overflow: hidden;
+            box-shadow: 0 0 40px rgba(255, 0, 64, 0.3);
+            transition: none;
+            pointer-events: auto;
+        }
+
+        .gm-sector-overlay iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .gm-sector-overlay.loaded iframe {
+            opacity: 1;
+        }
+
+        .gm-close-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid var(--alert-red);
+            color: var(--alert-red);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2rem;
+            cursor: pointer;
+            z-index: 101;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+        }
+
+        .gm-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--alert-red);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            z-index: 99;
+            pointer-events: none;
+        }
+
+        .hold-indicator {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            pointer-events: none;
+            z-index: 25;
+            transform: translate(-50%, -50%);
+            display: none;
+        }
+
+        .hold-indicator.active {
+            display: block;
+        }
+
+        .hold-indicator svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .hold-indicator circle {
+            fill: none;
+            stroke-width: 3;
+        }
+
+        .hold-indicator .bg {
+            stroke: rgba(0, 212, 255, 0.2);
+        }
+
+        .hold-indicator .progress {
+            stroke: var(--matrix-green);
+            stroke-linecap: round;
+            stroke-dasharray: 126;
+            stroke-dashoffset: 126;
+            transition: stroke-dashoffset 0.1s linear;
+            filter: drop-shadow(0 0 5px var(--matrix-green));
+        }
+
+        .hold-indicator.complete .progress {
+            stroke-dashoffset: 0;
+        }
+
+        .sector-label-temp {
+            position: absolute;
+            pointer-events: none;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid var(--matrix-green);
+            padding: 12px 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 30px var(--matrix-glow), inset 0 0 20px rgba(0, 255, 65, 0.05);
+            transform: translate(-50%, -150%) scale(0.9);
+            opacity: 0;
+            transition: all 0.2s ease-out;
+            text-align: center;
+            min-width: 220px;
+            backdrop-filter: blur(10px);
+        }
+
+        .sector-label-temp.visible {
+            opacity: 1;
+            transform: translate(-50%, -170%) scale(1);
+        }
+
+        .sector-label-temp .words {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            color: var(--matrix-green);
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--matrix-green);
+        }
+
+        .sector-label-temp .coords {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--cyan);
+            margin-top: 6px;
+            cursor: pointer;
+            pointer-events: auto;
+            display: inline-block;
+            padding: 4px 8px;
+            border: 1px solid var(--cyan-dim);
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .sector-label-temp .coords:active {
+            background: var(--cyan-dim);
+            transform: scale(0.95);
+        }
+
+        .sector-label-temp .hint {
+            font-size: 0.6rem;
+            color: var(--signal-dim);
+            margin-top: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .sector-label {
+            position: absolute;
+            pointer-events: auto;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid var(--matrix-green);
+            padding: 15px 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 30px var(--matrix-glow);
+            transform: translate(-50%, -50%) scale(0.9);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-align: center;
+            min-width: 240px;
+            backdrop-filter: blur(10px);
+        }
+
+        .sector-label.visible {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .sector-label .words {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.2rem;
+            color: var(--matrix-green);
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px var(--matrix-green);
+            margin-bottom: 8px;
+        }
+
+        .sector-label .coords-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--cyan);
+            margin: 8px 0;
+            padding: 6px;
+            border: 1px solid var(--cyan-dim);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .sector-label .coords-display:hover,
+        .sector-label .coords-display:active {
+            background: var(--cyan-dim);
+            box-shadow: 0 0 10px var(--cyan-dim);
+        }
+
+        .sector-label .coords-display::before {
+            content: 'OPEN IN GM';
+            display: block;
+            font-size: 0.6rem;
+            color: var(--signal-dim);
+            margin-bottom: 2px;
+            letter-spacing: 1px;
+        }
+
+        .sector-label .meta {
+            font-size: 0.7rem;
+            color: var(--signal-dim);
+            font-family: 'JetBrains Mono', monospace;
+            border-top: 1px solid rgba(0, 255, 65, 0.2);
+            padding-top: 8px;
+            margin-top: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .sector-label .actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .btn-copy {
+            background: rgba(0, 255, 65, 0.1);
+            border: 1px solid var(--matrix-green);
+            color: var(--matrix-green);
+            padding: 6px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            cursor: pointer;
+            border-radius: 2px;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .btn-copy:hover, .btn-copy:active {
+            background: var(--matrix-green);
+            color: #000;
+            box-shadow: 0 0 15px var(--matrix-glow);
+        }
+
+        .sector-selector {
+            position: absolute;
+            border: 2px solid var(--cyan);
+            background: rgba(0, 212, 255, 0.1);
+            pointer-events: none;
+            z-index: 16;
+            display: none;
+            box-shadow: 0 0 20px var(--cyan-dim);
+            transition: all 0.3s ease;
+        }
+
+        .sector-selector.active {
+            display: block;
+            animation: pulse-select 2s infinite;
+        }
+
+        .sector-selector.hold-mode {
+            border-color: var(--matrix-green);
+            background: rgba(0, 255, 65, 0.15);
+            animation: none;
+        }
+
+        .sector-selector.gm-active-sector {
+            border-color: var(--alert-red);
+            background: rgba(255, 0, 64, 0.1);
+            animation: pulse-red-border 1.5s infinite;
+        }
+
+        @keyframes pulse-select {
+            0%, 100% { border-color: var(--cyan); background: rgba(0, 212, 255, 0.08); }
+            50% { border-color: var(--matrix-green); background: rgba(0, 255, 65, 0.12); }
+        }
+
+        @keyframes pulse-red-border {
+            0%, 100% { border-color: var(--alert-red); box-shadow: 0 0 10px rgba(255, 0, 64, 0.3); }
+            50% { border-color: rgba(255, 0, 64, 0.5); box-shadow: 0 0 20px rgba(255, 0, 64, 0.6); }
+        }
+
+        .touch-guide {
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid var(--cyan-dim);
+            color: var(--cyan);
+            padding: 12px 24px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 50;
+            white-space: nowrap;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+        }
+
+        .touch-guide.visible {
+            opacity: 1;
+        }
+
+        .control-bar {
+            grid-row: 3;
+            background: linear-gradient(0deg, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.8) 100%);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(0, 212, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 10px;
+            z-index: 100;
+        }
+
+        .control-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--signal-dim);
+            padding: 8px 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-radius: 2px;
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .control-btn.active {
+            color: var(--cyan);
+            border-color: var(--cyan);
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        .toast {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(0, 0, 0, 0.95);
+            border: 1px solid var(--matrix-green);
+            color: var(--matrix-green);
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            z-index: 10000;
+            opacity: 0;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            box-shadow: 0 0 20px var(--matrix-glow);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .leaflet-container { 
+            background: var(--bg-deep) !important; 
+        }
+        
+        .leaflet-control-attribution { display: none !important; }
+        
+        @media (max-width: 768px) {
+            .command-interface { grid-template-rows: 45px 1fr 65px; }
+            .sector-label, .sector-label-temp { min-width: 200px; padding: 10px 15px; }
+            .sector-label .words, .sector-label-temp .words { font-size: 1rem; letter-spacing: 1px; }
+            .control-btn { padding: 6px 12px; font-size: 0.65rem; }
+            .watermark-text { font-size: 12vw; letter-spacing: 3vw; }
+            .gm-sector-overlay { border-width: 1px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="watermark-container">
+        <div class="watermark-text">ரா சுவாதி</div>
+    </div>
+    <div class="watermark-timestamp">2026-03-11T20:45:00Z</div>
+
+    <div class="scanner-bg"></div>
+    <div class="toast" id="toast">COORDINATES COPIED</div>
+
+    <div class="command-interface">
+        
+        <header class="status-header">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="pulse-dot" id="pulseDot"></div>
+                <span style="color: var(--matrix-green); font-size: 0.85rem; font-weight: 600;" id="headerTitle">SPECTER</span>
+            </div>
+            
+            <div class="grid-status" id="gridStatus">
+                PRECISION GRID // HOLD TO DECRYPT
+            </div>
+            
+            <div style="font-family: 'JetBrains Mono'; font-size: 0.8rem; color: var(--signal-dim);">
+                ZOOM: <span id="zoomLevel" style="color: var(--signal-white);">13</span>
+            </div>
+        </header>
+
+        <main class="map-zone" id="mapZone">
+            <div id="map"></div>
+            <canvas id="gridCanvas"></canvas>
+            
+            <!-- Google Maps Overlay Container -->
+            <div id="gmOverlayContainer"></div>
+            
+            <div id="holdIndicator" class="hold-indicator">
+                <svg viewBox="0 0 44 44">
+                    <circle class="bg" cx="22" cy="22" r="20"></circle>
+                    <circle class="progress" id="holdProgress" cx="22" cy="22" r="20"></circle>
+                </svg>
+            </div>
+            
+            <div id="sectorSelector" class="sector-selector"></div>
+            
+            <div id="sectorLabelTemp" class="sector-label-temp">
+                <div class="words" id="labelWordsTemp">ALPHA.TIGER.NORTH</div>
+                <div class="coords" id="tempCoords" onclick="activateGoogleMaps(event)">6.0329, 80.2168</div>
+                <div class="hint">Release to conceal • Tap coords for GM</div>
+            </div>
+            
+            <div id="sectorLabel" class="sector-label">
+                <div class="words" id="labelWords">ALPHA.TIGER.NORTH</div>
+                <div class="coords-display" id="permCoords" onclick="activateGoogleMaps(event)">
+                    6.0329, 80.2168
+                </div>
+                <div class="meta">
+                    <span id="accuracy">ACC: ±44m</span>
+                    <span id="militaryRef">REF: L80</span>
+                </div>
+                <div class="actions">
+                    <button class="btn-copy" onclick="copySectorData()">COPY</button>
+                    <button class="btn-copy" onclick="shareSector()">SHARE</button>
+                    <button class="btn-copy" onclick="closeGMLayer()" id="gmResetBtn" style="display:none; border-color: var(--alert-red); color: var(--alert-red);">EXIT GM</button>
+                </div>
+            </div>
+            
+            <div class="touch-guide" id="touchGuide">HOLD SECTOR TO DECRYPT</div>
+        </main>
+
+        <nav class="control-bar">
+            <button class="control-btn active" onclick="resetView()">Reset</button>
+            <button class="control-btn" onclick="map.zoomIn()">+ Zoom</button>
+            <button class="control-btn" onclick="map.zoomOut()">- Zoom</button>
+            <button class="control-btn" onclick="clearSelection()">Clear</button>
+        </nav>
+    </div>
+
+    <script>
+        // === KONFIGURATION ===
+        const CONFIG = {
+            SECTOR_SIZE: 0.0004,
+            GRID_ZOOM: 19,
+            LONG_PRESS_DURATION: 600,
+            DOUBLE_TAP_DELAY: 300,
+            DEFAULT_CENTER: [6.0329, 80.2168],
+            DEFAULT_ZOOM: 13,
+            GM_MIN_ZOOM: 19, // Ab diesem Zoom wird GM deaktiviert
+            GM_MIN_SIZE_PX: 100 // Mindestgröße in Pixeln für GM Overlay
+        };
+
+        const DICTS = {
+            alpha: ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET', 'KILO', 'LIMA'],
+            beta: ['TIGER', 'WOLF', 'VIPER', 'EAGLE', 'SHARK', 'RAVEN', 'FALCON', 'LION', 'BEAR', 'HAWK', 'JAGUAR', 'COBRA'],
+            gamma: ['PRIME', 'CORE', 'BASE', 'POINT', 'ZONE', 'SECTOR', 'NODE', 'HUB', 'PORT', 'CENTER', 'NEXUS', 'ZERO']
+        };
+
+        // === STATE ===
+        let state = {
+            isGridActive: false,
+            selectedSector: null,
+            currentWords: '',
+            currentCoords: null,
+            touchStartTime: 0,
+            touchStartPos: { x: 0, y: 0 },
+            longPressTimer: null,
+            isLongPress: false,
+            isHolding: false,
+            lastTapTime: 0,
+            touchCount: 0,
+            gmActive: false,
+            gmSector: null,
+            gmOverlay: null
+        };
+
+        // === INITIALISIERUNG ===
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false,
+            center: CONFIG.DEFAULT_CENTER,
+            zoom: CONFIG.DEFAULT_ZOOM,
+            minZoom: 3,
+            maxZoom: 22,
+            doubleClickZoom: false,
+            bounceAtZoomLimits: false
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 22,
+            opacity: 0.7
+        }).addTo(map);
+
+        // === CANVAS ===
+        const canvas = document.getElementById('gridCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            const rect = document.getElementById('mapZone').getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            if (state.isGridActive) drawGrid();
+            if (state.gmActive) updateGMOverlayPosition();
+        }
+        window.addEventListener('resize', () => setTimeout(resizeCanvas, 100));
+        resizeCanvas();
+
+        // === GRID FUNKTIONEN ===
+        function generateWords(lat, lng) {
+            const hash = Math.abs(Math.floor((lat * 10000) * (lng * 10000) * 997)) % 10000;
+            return `${DICTS.alpha[hash % 12]}.${DICTS.beta[(hash >> 4) % 12]}.${DICTS.gamma[(hash >> 8) % 12]}`;
+        }
+
+        function getSectorBounds(lat, lng) {
+            const latSector = Math.floor(lat / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+            const lngSector = Math.floor(lng / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+            return {
+                north: latSector + CONFIG.SECTOR_SIZE,
+                south: latSector,
+                east: lngSector + CONFIG.SECTOR_SIZE,
+                west: lngSector,
+                centerLat: latSector + (CONFIG.SECTOR_SIZE / 2),
+                centerLng: lngSector + (CONFIG.SECTOR_SIZE / 2)
+            };
+        }
+
+        function formatCoords(lat, lng) {
+            return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        }
+
+        function drawGrid() {
+            if (!state.isGridActive || state.gmActive) return;
+            
+            const width = canvas.width / window.devicePixelRatio;
+            const height = canvas.height / window.devicePixelRatio;
+            ctx.clearRect(0, 0, width, height);
+            
+            const bounds = map.getBounds();
+            const startLat = Math.floor(bounds.getSouth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+            const endLat = Math.ceil(bounds.getNorth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+            const startLng = Math.floor(bounds.getWest() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+            const endLng = Math.ceil(bounds.getEast() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+            
+            const latLines = Math.ceil((endLat - startLat) / CONFIG.SECTOR_SIZE);
+            const lngLines = Math.ceil((endLng - startLng) / CONFIG.SECTOR_SIZE);
+            
+            if (latLines > 100 || lngLines > 100) return;
+            
+            ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(0, 212, 255, 0.3)';
+            
+            ctx.beginPath();
+            for (let lng = startLng; lng <= endLng; lng += CONFIG.SECTOR_SIZE) {
+                const start = map.latLngToContainerPoint([bounds.getNorth(), lng]);
+                const end = map.latLngToContainerPoint([bounds.getSouth(), lng]);
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+            }
+            for (let lat = startLat; lat <= endLat; lat += CONFIG.SECTOR_SIZE) {
+                const start = map.latLngToContainerPoint([lat, bounds.getWest()]);
+                const end = map.latLngToContainerPoint([lat, bounds.getEast()]);
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+            }
+            ctx.stroke();
+        }
+
+        // === GOOGLE MAPS INTEGRATION ===
+        function activateGoogleMaps(e) {
+            if (e) e.stopPropagation();
+            
+            if (!state.selectedSector && !state.currentCoords) return;
+            
+            const sector = state.selectedSector || getSectorBounds(state.currentCoords.lat, state.currentCoords.lng);
+            const centerLat = sector.centerLat;
+            const centerLng = sector.centerLng;
+            
+            // Prüfe ob Zoom hoch genug
+            if (map.getZoom() < CONFIG.GRID_ZOOM) {
+                showToast('ZOOM IN TO ACTIVATE GM');
+                return;
+            }
+            
+            createGMOverlay(sector);
+            updateHeaderStatus(true);
+        }
+
+        function createGMOverlay(sector) {
+            // Entferne bestehendes Overlay
+            closeGMLayer();
+            
+            state.gmActive = true;
+            state.gmSector = sector;
+            
+            const container = document.getElementById('mapZone');
+            const overlay = document.createElement('div');
+            overlay.className = 'gm-sector-overlay';
+            overlay.id = 'gmActiveOverlay';
+            
+            // Berechne Pixel-Position
+            const nw = map.latLngToContainerPoint([sector.north, sector.west]);
+            const se = map.latLngToContainerPoint([sector.south, sector.east]);
+            const width = se.x - nw.x;
+            const height = se.y - nw.y;
+            
+            // Mindestgröße prüfen
+            if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX) {
+                showToast('SECTOR TOO SMALL');
+                state.gmActive = false;
+                return;
+            }
+            
+            overlay.style.left = nw.x + 'px';
+            overlay.style.top = nw.y + 'px';
+            overlay.style.width = width + 'px';
+            overlay.style.height = height + 'px';
+            
+            // Google Maps Embed URL
+            // Verwende Satellitenansicht mit Gelände (p für Terrain)
+            const gmUrl = `https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d1!2d${sector.centerLng}!3d${sector.centerLat}!3m2!1i1024!2i768!4f13.1!5e1!3m2!1sen!2sus!4v1`;
+            // Alternative direkte URL mit Satellit:
+            const gmSatUrl = `https://www.google.com/maps?q=${sector.centerLat},${sector.centerLng}&z=20&t=k&output=embed`;
+            
+            overlay.innerHTML = `
+                <div class="gm-loading">LOADING SAT...</div>
+                <button class="gm-close-btn" onclick="closeGMLayer()">×</button>
+                <iframe src="${gmSatUrl}" 
+                        allowfullscreen="" 
+                        loading="lazy" 
+                        referrerpolicy="no-referrer-when-downgrade"
+                        onload="this.parentElement.classList.add('loaded'); this.previousElementSibling.style.display='none';">
+                </iframe>
+            `;
+            
+            container.appendChild(overlay);
+            state.gmOverlay = overlay;
+            
+            // UI Updates
+            document.getElementById('gridCanvas').style.opacity = '0.1';
+            document.getElementById('sectorSelector').classList.add('gm-active-sector');
+            document.getElementById('gmResetBtn').style.display = 'inline-block';
+            
+            triggerHaptic([100, 50, 100]);
+            showToast('SATELLITE FEED ACTIVE');
+        }
+
+        function updateGMOverlayPosition() {
+            if (!state.gmActive || !state.gmOverlay || !state.gmSector) return;
+            
+            const sector = state.gmSector;
+            const nw = map.latLngToContainerPoint([sector.north, sector.west]);
+            const se = map.latLngToContainerPoint([sector.south, sector.east]);
+            const width = se.x - nw.x;
+            const height = se.y - nw.y;
+            
+            // Auto-close wenn zu klein oder zu weit außerhalb
+            if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX || 
+                nw.x > window.innerWidth || se.x < 0 || nw.y > window.innerHeight || se.y < 0) {
+                closeGMLayer();
+                return;
+            }
+            
+            state.gmOverlay.style.left = nw.x + 'px';
+            state.gmOverlay.style.top = nw.y + 'px';
+            state.gmOverlay.style.width = width + 'px';
+            state.gmOverlay.style.height = height + 'px';
+        }
+
+        function closeGMLayer() {
+            if (state.gmOverlay) {
+                state.gmOverlay.remove();
+                state.gmOverlay = null;
+            }
+            state.gmActive = false;
+            state.gmSector = null;
+            
+            document.getElementById('gridCanvas').style.opacity = '';
+            document.getElementById('sectorSelector').classList.remove('gm-active-sector');
+            document.getElementById('gmResetBtn').style.display = 'none';
+            
+            updateHeaderStatus(false);
+            
+            if (map.getZoom() >= CONFIG.GRID_ZOOM) {
+                drawGrid();
+            }
+        }
+
+        function updateHeaderStatus(gmActive) {
+            const dot = document.getElementById('pulseDot');
+            const status = document.getElementById('gridStatus');
+            const title = document.getElementById('headerTitle');
+            
+            if (gmActive) {
+                dot.classList.add('gm-mode');
+                status.classList.add('gm-active');
+                status.textContent = 'SATELLITE LINK ACTIVE // REDIRECTED';
+                title.textContent = 'SPECTER-GM';
+                title.style.color = 'var(--alert-red)';
+            } else {
+                dot.classList.remove('gm-mode');
+                status.classList.remove('gm-active');
+                status.textContent = 'PRECISION GRID // HOLD TO DECRYPT';
+                title.textContent = 'SPECTER';
+                title.style.color = 'var(--matrix-green)';
+            }
+        }
+
+        // === TOUCH & HOLD LOGIC ===
+        const mapZone = document.getElementById('mapZone');
+        const holdIndicator = document.getElementById('holdIndicator');
+        const holdProgress = document.getElementById('holdProgress');
+        const tempLabel = document.getElementById('sectorLabelTemp');
+
+        function startLongPress(e) {
+            if (state.gmActive) return; // Kein Long Press wenn GM aktiv
+            
+            if (!state.isGridActive || map.getZoom() < CONFIG.GRID_ZOOM) return;
+            
+            map.dragging.disable();
+            
+            const touch = e.touches[0];
+            state.touchStartPos = { x: touch.clientX, y: touch.clientY };
+            state.touchStartTime = Date.now();
+            state.isLongPress = false;
+            state.isHolding = true;
+            
+            holdIndicator.style.left = touch.clientX + 'px';
+            holdIndicator.style.top = touch.clientY + 'px';
+            holdIndicator.classList.add('active');
+            holdIndicator.classList.remove('complete');
+            
+            holdProgress.style.transition = 'none';
+            holdProgress.style.strokeDashoffset = '126';
+            holdProgress.getBoundingClientRect();
+            
+            setTimeout(() => {
+                if (state.isHolding) {
+                    holdProgress.style.transition = `stroke-dashoffset ${CONFIG.LONG_PRESS_DURATION}ms linear`;
+                    holdProgress.style.strokeDashoffset = '0';
+                }
+            }, 10);
+            
+            state.longPressTimer = setTimeout(() => {
+                completeLongPress(e);
+            }, CONFIG.LONG_PRESS_DURATION);
+            
+            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+            const sector = getSectorBounds(latlng.lat, latlng.lng);
+            selectSectorVisual(sector, true);
+        }
+
+        function moveLongPress(e) {
+            if (!state.isHolding) return;
+            
+            const touch = e.touches[0];
+            const dx = touch.clientX - state.touchStartPos.x;
+            const dy = touch.clientY - state.touchStartPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > 20) {
+                cancelLongPress();
+                map.dragging.enable();
+                return;
+            }
+            
+            holdIndicator.style.left = touch.clientX + 'px';
+            holdIndicator.style.top = touch.clientY + 'px';
+        }
+
+        function endLongPress(e) {
+            if (!state.isHolding) {
+                map.dragging.enable();
+                return;
+            }
+            
+            const wasLongPress = state.isLongPress;
+            cancelLongPress();
+            map.dragging.enable();
+            
+            if (wasLongPress) {
+                hideTempLabel();
+                e.preventDefault();
+                e.stopPropagation();
+            } else {
+                const currentTime = Date.now();
+                const timeDiff = currentTime - state.lastTapTime;
+                
+                if (timeDiff < CONFIG.DOUBLE_TAP_DELAY && state.touchCount === 1) {
+                    clearTimeout(state.longPressTimer);
+                    const touch = e.changedTouches[0];
+                    const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+                    const sector = getSectorBounds(latlng.lat, latlng.lng);
+                    showPermanentLabel(sector);
+                    state.touchCount = 0;
+                } else {
+                    state.touchCount = 1;
+                    state.longPressTimer = setTimeout(() => {
+                        state.touchCount = 0;
+                    }, CONFIG.DOUBLE_TAP_DELAY);
+                    
+                    const touch = e.changedTouches[0];
+                    const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+                    const sector = getSectorBounds(latlng.lat, latlng.lng);
+                    selectSectorVisual(sector, false);
+                }
+                state.lastTapTime = currentTime;
+            }
+        }
+
+        function completeLongPress(e) {
+            state.isLongPress = true;
+            state.isHolding = false;
+            holdIndicator.classList.add('complete');
+            
+            const touch = e.touches[0];
+            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+            const sector = getSectorBounds(latlng.lat, latlng.lng);
+            
+            showTempLabel(sector, touch.clientX, touch.clientY);
+            triggerHaptic([50, 30]);
+        }
+
+        function cancelLongPress() {
+            state.isHolding = false;
+            state.isLongPress = false;
+            clearTimeout(state.longPressTimer);
+            holdIndicator.classList.remove('active');
+            holdProgress.style.transition = 'none';
+            document.getElementById('sectorSelector').classList.remove('hold-mode');
+        }
+
+        // === LABEL FUNKTIONEN ===
+        function showTempLabel(sector, x, y) {
+            const words = generateWords(sector.centerLat, sector.centerLng);
+            const coords = formatCoords(sector.centerLat, sector.centerLng);
+            
+            document.getElementById('labelWordsTemp').textContent = words;
+            document.getElementById('tempCoords').textContent = coords;
+            
+            state.currentCoords = { lat: sector.centerLat, lng: sector.centerLng };
+            
+            tempLabel.style.left = x + 'px';
+            tempLabel.style.top = y + 'px';
+            tempLabel.classList.add('visible');
+            
+            triggerHaptic(40);
+        }
+
+        function hideTempLabel() {
+            tempLabel.classList.remove('visible');
+        }
+
+        function showPermanentLabel(sector) {
+            state.selectedSector = sector;
+            state.currentWords = generateWords(sector.centerLat, sector.centerLng);
+            state.currentCoords = { lat: sector.centerLat, lng: sector.centerLng };
+            
+            const label = document.getElementById('sectorLabel');
+            document.getElementById('labelWords').textContent = state.currentWords;
+            document.getElementById('permCoords').textContent = formatCoords(sector.centerLat, sector.centerLng);
+            document.getElementById('accuracy').textContent = `ACC: ±${Math.round(CONFIG.SECTOR_SIZE * 111000)}m`;
+            
+            const milRef = `${String.fromCharCode(65 + (Math.floor(sector.centerLat) % 26))}${Math.abs(Math.floor(sector.centerLng))}`;
+            document.getElementById('militaryRef').textContent = `REF: ${milRef}`;
+            
+            const center = map.latLngToContainerPoint([sector.centerLat, sector.centerLng]);
+            label.style.left = center.x + 'px';
+            label.style.top = center.y + 'px';
+            label.classList.add('visible');
+            
+            triggerHaptic([50, 30, 50]);
+        }
+
+        function selectSectorVisual(sector, isHold) {
+            const selector = document.getElementById('sectorSelector');
+            const nw = map.latLngToContainerPoint([sector.north, sector.west]);
+            const se = map.latLngToContainerPoint([sector.south, sector.east]);
+            
+            selector.style.left = nw.x + 'px';
+            selector.style.top = nw.y + 'px';
+            selector.style.width = (se.x - nw.x) + 'px';
+            selector.style.height = (se.y - nw.y) + 'px';
+            selector.classList.add('active');
+            
+            if (isHold) {
+                selector.classList.add('hold-mode');
+            } else {
+                selector.classList.remove('hold-mode');
+            }
+        }
+
+        function clearSelection() {
+            document.getElementById('sectorSelector').classList.remove('active');
+            document.getElementById('sectorLabel').classList.remove('visible');
+            hideTempLabel();
+            state.selectedSector = null;
+            state.currentWords = '';
+            state.currentCoords = null;
+            closeGMLayer();
+        }
+
+        // === UTILITIES ===
+        function triggerHaptic(pattern) {
+            if (navigator.vibrate) navigator.vibrate(pattern);
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        function copySectorData() {
+            if (!state.currentWords) return;
+            const text = `GRID: ${state.currentWords} | REF: ${document.getElementById('militaryRef').textContent} | COORDS: ${formatCoords(state.currentCoords.lat, state.currentCoords.lng)}`;
+            navigator.clipboard.writeText(text).then(() => showToast('COPIED TO CLIPBOARD'));
+        }
+
+        async function shareSector() {
+            if (!state.currentWords) return;
+            if (navigator.share) {
+                await navigator.share({ 
+                    title: 'SPECTER GRID', 
+                    text: `Sector: ${state.currentWords} | Coords: ${formatCoords(state.currentCoords.lat, state.currentCoords.lng)}` 
+                });
+            } else {
+                copySectorData();
+            }
+        }
+
+        // === EVENTS ===
+        mapZone.addEventListener('touchstart', startLongPress, { passive: false });
+        mapZone.addEventListener('touchmove', moveLongPress, { passive: false });
+        mapZone.addEventListener('touchend', endLongPress, { passive: false });
+        mapZone.addEventListener('touchcancel', cancelLongPress);
+
+        mapZone.addEventListener('mousedown', (e) => {
+            if (state.gmActive) return;
+            if (e.button !== 0) return;
+            map.dragging.disable();
+            const touch = { 
+                touches: [{ clientX: e.clientX, clientY: e.clientY }],
+                clientX: e.clientX, 
+                clientY: e.clientY 
+            };
+            startLongPress(touch);
+        });
+        
+        mapZone.addEventListener('mousemove', (e) => {
+            if (!state.isHolding) return;
+            const touch = { 
+                touches: [{ clientX: e.clientX, clientY: e.clientY }],
+                clientX: e.clientX, 
+                clientY: e.clientY 
+            };
+            moveLongPress(touch);
+        });
+        
+        mapZone.addEventListener('mouseup', (e) => {
+            if (!state.isHolding) {
+                map.dragging.enable();
+                return;
+            }
+            const touch = { changedTouches: [{ clientX: e.clientX, clientY: e.clientY }] };
+            endLongPress(touch);
+            map.dragging.enable();
+        });
+        
+        mapZone.addEventListener('mouseleave', () => {
+            if (state.isHolding) {
+                cancelLongPress();
+                map.dragging.enable();
+            }
+        });
+
+        map.on('zoom', function() {
+            const zoom = map.getZoom();
+            document.getElementById('zoomLevel').textContent = zoom;
+            
+            // Auto-close GM wenn Zoom zu niedrig
+            if (state.gmActive && zoom < CONFIG.GM_MIN_ZOOM) {
+                closeGMLayer();
+                showToast('GM DISCONNECTED - ZOOM LEVEL INSUFFICIENT');
+            }
+            
+            const active = zoom >= CONFIG.GRID_ZOOM;
+            state.isGridActive = active;
+            document.getElementById('gridCanvas').classList.toggle('visible', active);
+            document.getElementById('gridStatus').classList.toggle('active', active && !state.gmActive);
+            
+            const guide = document.getElementById('touchGuide');
+            if (active && !state.gmActive) {
+                guide.textContent = 'HOLD SECTOR TO DECRYPT';
+                guide.classList.add('visible');
+                setTimeout(() => guide.classList.remove('visible'), 3000);
+                drawGrid();
+            } else if (!active && !state.gmActive) {
+                guide.classList.remove('visible');
+                clearSelection();
+            }
+        });
+
+        map.on('move', function() {
+            drawGrid();
+            updateGMOverlayPosition();
+            
+            // Prüfe ob permanente Labels repositioniert werden müssen
+            if (state.selectedSector) {
+                const center = map.latLngToContainerPoint([state.selectedSector.centerLat, state.selectedSector.centerLng]);
+                const label = document.getElementById('sectorLabel');
+                if (label.classList.contains('visible')) {
+                    label.style.left = center.x + 'px';
+                    label.style.top = center.y + 'px';
+                }
+            }
+        });
+
+        function resetView() {
+            closeGMLayer();
+            map.flyTo(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM, { duration: 1.5 });
+            clearSelection();
+        }
+
+        // Init
+        setTimeout(() => {
+            const guide = document.getElementById('touchGuide');
+            guide.textContent = 'ZOOM TO LEVEL 19 TO ACTIVATE';
+            guide.classList.add('visible');
+            setTimeout(() => guide.classList.remove('visible'), 3000);
+        }, 1000);
+    </script>
+</body>
+</html>
