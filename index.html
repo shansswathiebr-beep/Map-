@@ -336,7 +336,7 @@
             stroke: var(--matrix-green);
             stroke-linecap: round;
             stroke-dasharray: 126;
-            stroke-dashoffset: 126;
+            stroke-dashoffset = 126;
             transition: stroke-dashoffset 0.1s linear;
             filter: drop-shadow(0 0 5px var(--matrix-green));
         }
@@ -388,6 +388,7 @@
             border: 1px solid var(--cyan-dim);
             border-radius: 3px;
             transition: all 0.2s;
+            background: rgba(0, 212, 255, 0.1);
         }
 
         .sector-label-temp .coords:active {
@@ -709,6 +710,7 @@
         <button class="control-btn" id="btnZoomIn">+ Zoom</button>
         <button class="control-btn" id="btnZoomOut">- Zoom</button>
         <button class="control-btn" id="btnClear">Clear</button>
+        <button class="control-btn" id="btnForceGrid">Grid</button>
     </nav>
 </div>
 
@@ -748,7 +750,8 @@
         gmActive: false,
         gmSector: null,
         gmOverlay: null,
-        resizeTimeout: null
+        resizeTimeout: null,
+        canvasReady: false
     };
 
     // === MAP INIT ===
@@ -761,7 +764,7 @@
         maxZoom: 22,
         doubleClickZoom: false,
         bounceAtZoomLimits: false,
-        preferCanvas: true // Performance optimization
+        preferCanvas: true
     });
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -772,7 +775,6 @@
 
     const zoomLevelSpan = document.getElementById('zoomLevel');
 
-    // Debounced grid redraw
     function debounce(func, wait) {
         let timeout;
         return function executedFunction(...args) {
@@ -786,44 +788,75 @@
     }
 
     const debouncedDrawGrid = debounce(() => {
-        if (state.isGridActive && !state.gmActive && map.getZoom() >= CONFIG.GRID_ZOOM) {
-            drawGrid();
-        } else {
-            clearCanvas();
-        }
+        checkAndDrawGrid();
     }, 50);
 
+    function checkAndDrawGrid() {
+        const zoom = map.getZoom();
+        zoomLevelSpan.textContent = zoom;
+        
+        console.log('Checking grid. Zoom:', zoom, 'Required:', CONFIG.GRID_ZOOM, 'CanvasReady:', state.canvasReady);
+        
+        if (!state.canvasReady) {
+            console.log('Canvas not ready yet');
+            return;
+        }
+        
+        if (state.isGridActive && !state.gmActive && zoom >= CONFIG.GRID_ZOOM) {
+            document.getElementById('gridCanvas').classList.add('visible');
+            drawGrid();
+            console.log('Grid drawn');
+        } else {
+            document.getElementById('gridCanvas').classList.remove('visible');
+            clearCanvas();
+            if (zoom < CONFIG.GRID_ZOOM) {
+                console.log('Zoom too low for grid');
+            }
+        }
+    }
+
     map.on('zoomend moveend', () => {
-        zoomLevelSpan.textContent = map.getZoom();
         debouncedDrawGrid();
         if (state.gmActive) {
             updateGMOverlayPosition();
         }
     });
 
-    // Handle map load
-    map.on('load', () => {
-        zoomLevelSpan.textContent = map.getZoom();
-        resizeCanvas();
-        if (map.getZoom() >= CONFIG.GRID_ZOOM) {
-            drawGrid();
-        }
-    });
-
-    // Trigger load event if map already initialized (e.g. hot reload)
-    if (map._loaded) {
-        map.fire('load');
-    }
-
     // === CANVAS ===
     const canvas = document.getElementById('gridCanvas');
     const ctx = canvas.getContext('2d');
 
+    function initCanvas() {
+        console.log('Initializing canvas...');
+        const rect = document.getElementById('mapZone').getBoundingClientRect();
+        
+        if (rect.width === 0 || rect.height === 0) {
+            console.warn('MapZone has no size, retrying in 100ms');
+            setTimeout(initCanvas, 100);
+            return;
+        }
+        
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = rect.width * ratio;
+        canvas.height = rect.height * ratio;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(ratio, ratio);
+        
+        state.canvasReady = true;
+        console.log('Canvas initialized:', rect.width, 'x', rect.height);
+        
+        // Sofort Grid zeichnen wenn Zoom passt
+        checkAndDrawGrid();
+    }
+
     function resizeCanvas() {
+        if (!state.canvasReady) return;
+        
         const rect = document.getElementById('mapZone').getBoundingClientRect();
         const ratio = window.devicePixelRatio || 1;
         
-        // Only resize if necessary to avoid context loss
         if (canvas.width !== rect.width * ratio || canvas.height !== rect.height * ratio) {
             canvas.width = rect.width * ratio;
             canvas.height = rect.height * ratio;
@@ -833,9 +866,7 @@
             ctx.scale(ratio, ratio);
         }
         
-        if (state.isGridActive && map.getZoom() >= CONFIG.GRID_ZOOM && !state.gmActive) {
-            drawGrid();
-        }
+        checkAndDrawGrid();
         if (state.gmActive) updateGMOverlayPosition();
     }
 
@@ -851,7 +882,6 @@
 
     // === GRID FUNCTIONS ===
     function generateWords(lat, lng) {
-        // Normalize coordinates for consistent hashing
         const normLat = ((lat % 90) + 90) % 90;
         const normLng = ((lng % 180) + 180) % 180;
         const hash = Math.abs(Math.floor((normLat * 10000) * (normLng * 10000) * 997)) % 10000;
@@ -859,7 +889,6 @@
     }
 
     function getSectorBounds(lat, lng) {
-        // Handle negative coordinates correctly for sector calculation
         const latSector = Math.floor(lat / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
         const lngSector = Math.floor(lng / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
         return {
@@ -877,7 +906,10 @@
     }
 
     function drawGrid() {
-        if (!state.isGridActive || state.gmActive) return;
+        if (!state.isGridActive || state.gmActive || !state.canvasReady) {
+            console.log('Cannot draw grid:', state.isGridActive, state.gmActive, state.canvasReady);
+            return;
+        }
 
         const rect = document.getElementById('mapZone').getBoundingClientRect();
         const width = rect.width;
@@ -893,7 +925,10 @@
         const latLines = Math.ceil((endLat - startLat) / CONFIG.SECTOR_SIZE);
         const lngLines = Math.ceil((endLng - startLng) / CONFIG.SECTOR_SIZE);
 
-        if (latLines > CONFIG.MAX_GRID_LINES || lngLines > CONFIG.MAX_GRID_LINES) return;
+        if (latLines > CONFIG.MAX_GRID_LINES || lngLines > CONFIG.MAX_GRID_LINES) {
+            console.log('Too many grid lines:', latLines, lngLines);
+            return;
+        }
 
         ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
         ctx.lineWidth = 1.0;
@@ -914,17 +949,26 @@
             ctx.lineTo(end.x, end.y);
         }
         ctx.stroke();
+        
+        console.log('Grid drawn with', latLines, 'x', lngLines, 'lines');
     }
 
     // === GOOGLE MAPS INTEGRATION ===
     function activateGoogleMaps() {
-        if (!state.selectedSector && !state.currentCoords) return;
+        console.log('Activating GM...', state.selectedSector, state.currentCoords);
+        
+        if (!state.selectedSector && !state.currentCoords) {
+            showToast('NO SECTOR DATA');
+            return;
+        }
 
         const sector = state.selectedSector || getSectorBounds(state.currentCoords.lat, state.currentCoords.lng);
+        
         if (map.getZoom() < CONFIG.GRID_ZOOM) {
             showToast('ZOOM IN TO ACTIVATE GM');
             return;
         }
+        
         createGMOverlay(sector);
         updateHeaderStatus(true);
     }
@@ -956,7 +1000,6 @@
         overlay.style.width = width + 'px';
         overlay.style.height = height + 'px';
 
-        // Google Maps Embed URL (may be blocked by X-Frame-Options on some networks)
         const gmSatUrl = `https://www.google.com/maps?q=${sector.centerLat},${sector.centerLng}&z=20&t=k&output=embed`;
         const externalUrl = `https://www.google.com/maps?q=${sector.centerLat},${sector.centerLng}&z=20&t=k`;
 
@@ -977,7 +1020,6 @@
             </iframe>
         `;
 
-        // Prevent Leaflet from intercepting events on the overlay
         L.DomEvent.disableClickPropagation(overlay);
         L.DomEvent.disableScrollPropagation(overlay);
 
@@ -1001,7 +1043,6 @@
         const width = se.x - nw.x;
         const height = se.y - nw.y;
 
-        // Close if too small or out of viewport
         if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX ||
             nw.x > window.innerWidth || se.x < 0 || nw.y > window.innerHeight || se.y < 0) {
             closeGMLayer();
@@ -1076,7 +1117,7 @@
     function selectSectorVisual(sector, holdMode) {
         const nw = map.latLngToContainerPoint([sector.north, sector.west]);
         const se = map.latLngToContainerPoint([sector.south, sector.east]);
-        const width = Math.max(se.x - nw.x, 2); // Min width 2px
+        const width = Math.max(se.x - nw.x, 2);
         const height = Math.max(se.y - nw.y, 2);
 
         sectorSelector.style.left = nw.x + 'px';
@@ -1096,14 +1137,12 @@
         if (state.gmActive) return;
         if (!state.isGridActive || map.getZoom() < CONFIG.GRID_ZOOM) return;
 
-        // Prevent default only if we might trigger long press
         const touch = e.touches[0];
         state.touchStartPos = { x: touch.clientX, y: touch.clientY };
         state.touchStartTime = Date.now();
         state.isLongPress = false;
         state.isHolding = true;
 
-        // Disable map dragging to prevent movement while holding
         map.dragging.disable();
 
         holdIndicator.style.left = touch.clientX + 'px';
@@ -1111,11 +1150,9 @@
         holdIndicator.classList.add('active');
         holdIndicator.classList.remove('complete');
 
-        // Reset and start animation
         holdProgress.style.transition = 'none';
         holdProgress.style.strokeDashoffset = '126';
         
-        // Force reflow
         void holdProgress.getBoundingClientRect();
 
         setTimeout(() => {
@@ -1142,7 +1179,6 @@
         const dy = touch.clientY - state.touchStartPos.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
 
-        // Cancel if moved too far
         if (distance > 20) {
             cancelLongPress();
             map.dragging.enable();
@@ -1171,7 +1207,6 @@
             const touch = e.changedTouches[0];
             const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
             
-            // Validate coordinates
             if (!latlng || isNaN(latlng.lat) || isNaN(latlng.lng)) return;
             
             const sector = getSectorBounds(latlng.lat, latlng.lng);
@@ -1184,7 +1219,6 @@
                 state.lastTapTime = currentTime;
                 selectSectorVisual(sector, false);
                 
-                // Reset touch count after delay
                 clearTimeout(state.longPressTimer);
                 state.longPressTimer = setTimeout(() => {
                     state.touchCount = 0;
@@ -1286,7 +1320,6 @@
             navigator.clipboard.writeText(data).then(() => {
                 showToast('SECTOR COPIED');
             }).catch(() => {
-                // Fallback
                 const textArea = document.createElement("textarea");
                 textArea.value = data;
                 document.body.appendChild(textArea);
@@ -1331,9 +1364,6 @@
     }
 
     // === EVENT WIRING ===
-    
-    // Use passive listeners for touchstart/move for better scroll performance, 
-    // but we need to prevent default on touchend for double-tap logic
     mapZone.addEventListener('touchstart', startLongPress, { passive: true });
     mapZone.addEventListener('touchmove', moveLongPress, { passive: true });
     mapZone.addEventListener('touchend', endLongPress, { passive: false });
@@ -1342,9 +1372,8 @@
         map.dragging.enable();
     });
 
-    // Mouse support for desktop testing
     mapZone.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return; // Only left click
+        if (e.button !== 0) return;
         const touch = { clientX: e.clientX, clientY: e.clientY };
         startLongPress({ touches: [touch] });
         
@@ -1362,15 +1391,34 @@
         document.addEventListener('mouseup', mouseUp);
     });
 
-    document.getElementById('tempCoords').addEventListener('click', (e) => {
-        e.stopPropagation();
-        activateGoogleMaps();
-    });
+    function setupCoordButton(elementId) {
+        const element = document.getElementById(elementId);
+        
+        element.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('Click on coords detected');
+            activateGoogleMaps();
+        });
+        
+        element.addEventListener('touchend', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('Touch on coords detected');
+            activateGoogleMaps();
+        });
+        
+        element.addEventListener('touchstart', () => {
+            element.style.background = 'var(--cyan-dim)';
+        });
+        element.addEventListener('touchend', () => {
+            setTimeout(() => {
+                element.style.background = '';
+            }, 200);
+        });
+    }
 
-    document.getElementById('permCoords').addEventListener('click', (e) => {
-        e.stopPropagation();
-        activateGoogleMaps();
-    });
+    setupCoordButton('tempCoords');
+    setupCoordButton('permCoords');
 
     document.getElementById('btnCopy').addEventListener('click', copySectorData);
     document.getElementById('btnShare').addEventListener('click', shareSector);
@@ -1380,14 +1428,37 @@
     document.getElementById('btnZoomIn').addEventListener('click', () => map.zoomIn());
     document.getElementById('btnZoomOut').addEventListener('click', () => map.zoomOut());
     document.getElementById('btnClear').addEventListener('click', clearSelection);
+    
+    // FORCE GRID BUTTON (zum Debuggen)
+    document.getElementById('btnForceGrid').addEventListener('click', () => {
+        console.log('Forcing grid redraw. Current zoom:', map.getZoom());
+        state.canvasReady = false;
+        initCanvas();
+    });
 
-    // Show touch guide briefly on load
+    // INITIALISIERUNG
     window.addEventListener('load', () => {
-        const guide = document.getElementById('touchGuide');
-        guide.classList.add('visible');
+        console.log('Window loaded, initializing...');
+        
+        // Warte kurz damit Layout fertig ist
         setTimeout(() => {
-            guide.classList.remove('visible');
-        }, 3000);
+            initCanvas();
+            zoomLevelSpan.textContent = map.getZoom();
+            
+            const guide = document.getElementById('touchGuide');
+            guide.classList.add('visible');
+            setTimeout(() => {
+                guide.classList.remove('visible');
+            }, 3000);
+        }, 100);
+    });
+    
+    // Fallback Initialisierung wenn Map schneller lädt als Window
+    map.whenReady(() => {
+        console.log('Map is ready');
+        if (!state.canvasReady) {
+            setTimeout(initCanvas, 100);
+        }
     });
 </script>
 </body>
