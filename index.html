@@ -8,13 +8,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>OPERATION SPECTER | Precision Grid</title>
     <meta name="timestamp" content="2026-03-11T20:45:00Z">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap');
-        
+
         :root {
             --bg-void: #000000;
             --bg-deep: #020408;
@@ -29,11 +29,11 @@
             --gm-overlay-bg: rgba(0, 0, 0, 0.95);
         }
 
-        * { 
-            margin: 0; 
-            padding: 0; 
-            box-sizing: border-box; 
-            -webkit-tap-highlight-color: transparent; 
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
             user-select: none;
             -webkit-user-select: none;
         }
@@ -209,7 +209,6 @@
             opacity: 1;
         }
 
-        /* Google Maps Overlay für aktiven Sektor */
         .gm-sector-overlay {
             position: absolute;
             border: 2px solid var(--alert-red);
@@ -231,6 +230,27 @@
 
         .gm-sector-overlay.loaded iframe {
             opacity: 1;
+        }
+
+        .gm-sector-overlay .gm-error {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: var(--alert-red);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .gm-sector-overlay.error iframe {
+            display: none;
+        }
+
+        .gm-sector-overlay.error .gm-error {
+            display: block;
         }
 
         .gm-close-btn {
@@ -263,6 +283,24 @@
             font-size: 0.8rem;
             z-index: 99;
             pointer-events: none;
+        }
+
+        .gm-external-btn {
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 0, 64, 0.2);
+            border: 1px solid var(--alert-red);
+            color: var(--alert-red);
+            padding: 6px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            cursor: pointer;
+            z-index: 101;
+            border-radius: 3px;
+            text-decoration: none;
+            display: inline-block;
         }
 
         .hold-indicator {
@@ -585,12 +623,12 @@
             transform: translateX(-50%) translateY(0);
         }
 
-        .leaflet-container { 
-            background: var(--bg-deep) !important; 
+        .leaflet-container {
+            background: var(--bg-deep) !important;
         }
-        
+
         .leaflet-control-attribution { display: none !important; }
-        
+
         @media (max-width: 768px) {
             .command-interface { grid-template-rows: 45px 1fr 65px; }
             .sector-label, .sector-label-temp { min-width: 200px; padding: 10px 15px; }
@@ -603,677 +641,754 @@
 </head>
 <body>
 
-    <div class="watermark-container">
-        <div class="watermark-text">ரா சுவாதி</div>
-    </div>
-    <div class="watermark-timestamp">2026-03-11T20:45:00Z</div>
+<div class="watermark-container">
+    <div class="watermark-text">ரா சுவாதி</div>
+</div>
+<div class="watermark-timestamp">2026-03-11T20:45:00Z</div>
 
-    <div class="scanner-bg"></div>
-    <div class="toast" id="toast">COORDINATES COPIED</div>
+<div class="scanner-bg"></div>
+<div class="toast" id="toast">COORDINATES COPIED</div>
 
-    <div class="command-interface">
+<div class="command-interface">
+
+    <header class="status-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="pulse-dot" id="pulseDot"></div>
+            <span style="color: var(--matrix-green); font-size: 0.85rem; font-weight: 600;" id="headerTitle">SPECTER</span>
+        </div>
+
+        <div class="grid-status active" id="gridStatus">
+            PRECISION GRID // HOLD TO DECRYPT
+        </div>
+
+        <div style="font-family: 'JetBrains Mono'; font-size: 0.8rem; color: var(--signal-dim);">
+            ZOOM: <span id="zoomLevel" style="color: var(--signal-white);">--</span>
+        </div>
+    </header>
+
+    <main class="map-zone" id="mapZone">
+        <div id="map"></div>
+        <canvas id="gridCanvas"></canvas>
+
+        <div id="holdIndicator" class="hold-indicator">
+            <svg viewBox="0 0 44 44">
+                <circle class="bg" cx="22" cy="22" r="20"></circle>
+                <circle class="progress" id="holdProgress" cx="22" cy="22" r="20"></circle>
+            </svg>
+        </div>
+
+        <div id="sectorSelector" class="sector-selector"></div>
+
+        <div id="sectorLabelTemp" class="sector-label-temp">
+            <div class="words" id="labelWordsTemp">ALPHA.TIGER.NORTH</div>
+            <div class="coords" id="tempCoords">6.0329, 80.2168</div>
+            <div class="hint">Release to conceal • Tap coords for GM</div>
+        </div>
+
+        <div id="sectorLabel" class="sector-label">
+            <div class="words" id="labelWords">ALPHA.TIGER.NORTH</div>
+            <div class="coords-display" id="permCoords">
+                6.0329, 80.2168
+            </div>
+            <div class="meta">
+                <span id="accuracy">ACC: ±44m</span>
+                <span id="militaryRef">REF: L80</span>
+            </div>
+            <div class="actions">
+                <button class="btn-copy" id="btnCopy">COPY</button>
+                <button class="btn-copy" id="btnShare">SHARE</button>
+                <button class="btn-copy" id="gmResetBtn" style="display:none; border-color: var(--alert-red); color: var(--alert-red);">EXIT GM</button>
+            </div>
+        </div>
+
+        <div class="touch-guide" id="touchGuide">HOLD SECTOR TO DECRYPT</div>
+    </main>
+
+    <nav class="control-bar">
+        <button class="control-btn active" id="btnReset">Reset</button>
+        <button class="control-btn" id="btnZoomIn">+ Zoom</button>
+        <button class="control-btn" id="btnZoomOut">- Zoom</button>
+        <button class="control-btn" id="btnClear">Clear</button>
+    </nav>
+</div>
+
+<script>
+    // === CONFIG ===
+    const CONFIG = {
+        SECTOR_SIZE: 0.0004,
+        GRID_ZOOM: 19,
+        LONG_PRESS_DURATION: 600,
+        DOUBLE_TAP_DELAY: 300,
+        DEFAULT_CENTER: [6.0329, 80.2168],
+        DEFAULT_ZOOM: 13,
+        GM_MIN_ZOOM: 19,
+        GM_MIN_SIZE_PX: 100,
+        MAX_GRID_LINES: 100
+    };
+
+    const DICTS = {
+        alpha: ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET', 'KILO', 'LIMA'],
+        beta: ['TIGER', 'WOLF', 'VIPER', 'EAGLE', 'SHARK', 'RAVEN', 'FALCON', 'LION', 'BEAR', 'HAWK', 'JAGUAR', 'COBRA'],
+        gamma: ['PRIME', 'CORE', 'BASE', 'POINT', 'ZONE', 'SECTOR', 'NODE', 'HUB', 'PORT', 'CENTER', 'NEXUS', 'ZERO']
+    };
+
+    // === STATE ===
+    let state = {
+        isGridActive: true,
+        selectedSector: null,
+        currentWords: '',
+        currentCoords: null,
+        touchStartTime: 0,
+        touchStartPos: { x: 0, y: 0 },
+        longPressTimer: null,
+        isLongPress: false,
+        isHolding: false,
+        lastTapTime: 0,
+        touchCount: 0,
+        gmActive: false,
+        gmSector: null,
+        gmOverlay: null,
+        resizeTimeout: null
+    };
+
+    // === MAP INIT ===
+    const map = L.map('map', {
+        zoomControl: false,
+        attributionControl: false,
+        center: CONFIG.DEFAULT_CENTER,
+        zoom: CONFIG.DEFAULT_ZOOM,
+        minZoom: 3,
+        maxZoom: 22,
+        doubleClickZoom: false,
+        bounceAtZoomLimits: false,
+        preferCanvas: true // Performance optimization
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 22,
+        opacity: 0.7,
+        subdomains: 'abcd'
+    }).addTo(map);
+
+    const zoomLevelSpan = document.getElementById('zoomLevel');
+
+    // Debounced grid redraw
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    const debouncedDrawGrid = debounce(() => {
+        if (state.isGridActive && !state.gmActive && map.getZoom() >= CONFIG.GRID_ZOOM) {
+            drawGrid();
+        } else {
+            clearCanvas();
+        }
+    }, 50);
+
+    map.on('zoomend moveend', () => {
+        zoomLevelSpan.textContent = map.getZoom();
+        debouncedDrawGrid();
+        if (state.gmActive) {
+            updateGMOverlayPosition();
+        }
+    });
+
+    // Handle map load
+    map.on('load', () => {
+        zoomLevelSpan.textContent = map.getZoom();
+        resizeCanvas();
+        if (map.getZoom() >= CONFIG.GRID_ZOOM) {
+            drawGrid();
+        }
+    });
+
+    // Trigger load event if map already initialized (e.g. hot reload)
+    if (map._loaded) {
+        map.fire('load');
+    }
+
+    // === CANVAS ===
+    const canvas = document.getElementById('gridCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+        const rect = document.getElementById('mapZone').getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
         
-        <header class="status-header">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div class="pulse-dot" id="pulseDot"></div>
-                <span style="color: var(--matrix-green); font-size: 0.85rem; font-weight: 600;" id="headerTitle">SPECTER</span>
-            </div>
-            
-            <div class="grid-status" id="gridStatus">
-                PRECISION GRID // HOLD TO DECRYPT
-            </div>
-            
-            <div style="font-family: 'JetBrains Mono'; font-size: 0.8rem; color: var(--signal-dim);">
-                ZOOM: <span id="zoomLevel" style="color: var(--signal-white);">13</span>
-            </div>
-        </header>
-
-        <main class="map-zone" id="mapZone">
-            <div id="map"></div>
-            <canvas id="gridCanvas"></canvas>
-            
-            <!-- Google Maps Overlay Container -->
-            <div id="gmOverlayContainer"></div>
-            
-            <div id="holdIndicator" class="hold-indicator">
-                <svg viewBox="0 0 44 44">
-                    <circle class="bg" cx="22" cy="22" r="20"></circle>
-                    <circle class="progress" id="holdProgress" cx="22" cy="22" r="20"></circle>
-                </svg>
-            </div>
-            
-            <div id="sectorSelector" class="sector-selector"></div>
-            
-            <div id="sectorLabelTemp" class="sector-label-temp">
-                <div class="words" id="labelWordsTemp">ALPHA.TIGER.NORTH</div>
-                <div class="coords" id="tempCoords" onclick="activateGoogleMaps(event)">6.0329, 80.2168</div>
-                <div class="hint">Release to conceal • Tap coords for GM</div>
-            </div>
-            
-            <div id="sectorLabel" class="sector-label">
-                <div class="words" id="labelWords">ALPHA.TIGER.NORTH</div>
-                <div class="coords-display" id="permCoords" onclick="activateGoogleMaps(event)">
-                    6.0329, 80.2168
-                </div>
-                <div class="meta">
-                    <span id="accuracy">ACC: ±44m</span>
-                    <span id="militaryRef">REF: L80</span>
-                </div>
-                <div class="actions">
-                    <button class="btn-copy" onclick="copySectorData()">COPY</button>
-                    <button class="btn-copy" onclick="shareSector()">SHARE</button>
-                    <button class="btn-copy" onclick="closeGMLayer()" id="gmResetBtn" style="display:none; border-color: var(--alert-red); color: var(--alert-red);">EXIT GM</button>
-                </div>
-            </div>
-            
-            <div class="touch-guide" id="touchGuide">HOLD SECTOR TO DECRYPT</div>
-        </main>
-
-        <nav class="control-bar">
-            <button class="control-btn active" onclick="resetView()">Reset</button>
-            <button class="control-btn" onclick="map.zoomIn()">+ Zoom</button>
-            <button class="control-btn" onclick="map.zoomOut()">- Zoom</button>
-            <button class="control-btn" onclick="clearSelection()">Clear</button>
-        </nav>
-    </div>
-
-    <script>
-        // === KONFIGURATION ===
-        const CONFIG = {
-            SECTOR_SIZE: 0.0004,
-            GRID_ZOOM: 19,
-            LONG_PRESS_DURATION: 600,
-            DOUBLE_TAP_DELAY: 300,
-            DEFAULT_CENTER: [6.0329, 80.2168],
-            DEFAULT_ZOOM: 13,
-            GM_MIN_ZOOM: 19, // Ab diesem Zoom wird GM deaktiviert
-            GM_MIN_SIZE_PX: 100 // Mindestgröße in Pixeln für GM Overlay
-        };
-
-        const DICTS = {
-            alpha: ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET', 'KILO', 'LIMA'],
-            beta: ['TIGER', 'WOLF', 'VIPER', 'EAGLE', 'SHARK', 'RAVEN', 'FALCON', 'LION', 'BEAR', 'HAWK', 'JAGUAR', 'COBRA'],
-            gamma: ['PRIME', 'CORE', 'BASE', 'POINT', 'ZONE', 'SECTOR', 'NODE', 'HUB', 'PORT', 'CENTER', 'NEXUS', 'ZERO']
-        };
-
-        // === STATE ===
-        let state = {
-            isGridActive: false,
-            selectedSector: null,
-            currentWords: '',
-            currentCoords: null,
-            touchStartTime: 0,
-            touchStartPos: { x: 0, y: 0 },
-            longPressTimer: null,
-            isLongPress: false,
-            isHolding: false,
-            lastTapTime: 0,
-            touchCount: 0,
-            gmActive: false,
-            gmSector: null,
-            gmOverlay: null
-        };
-
-        // === INITIALISIERUNG ===
-        const map = L.map('map', {
-            zoomControl: false,
-            attributionControl: false,
-            center: CONFIG.DEFAULT_CENTER,
-            zoom: CONFIG.DEFAULT_ZOOM,
-            minZoom: 3,
-            maxZoom: 22,
-            doubleClickZoom: false,
-            bounceAtZoomLimits: false
-        });
-
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            maxZoom: 22,
-            opacity: 0.7
-        }).addTo(map);
-
-        // === CANVAS ===
-        const canvas = document.getElementById('gridCanvas');
-        const ctx = canvas.getContext('2d');
-
-        function resizeCanvas() {
-            const rect = document.getElementById('mapZone').getBoundingClientRect();
-            canvas.width = rect.width * window.devicePixelRatio;
-            canvas.height = rect.height * window.devicePixelRatio;
+        // Only resize if necessary to avoid context loss
+        if (canvas.width !== rect.width * ratio || canvas.height !== rect.height * ratio) {
+            canvas.width = rect.width * ratio;
+            canvas.height = rect.height * ratio;
             canvas.style.width = rect.width + 'px';
             canvas.style.height = rect.height + 'px';
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-            if (state.isGridActive) drawGrid();
-            if (state.gmActive) updateGMOverlayPosition();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.scale(ratio, ratio);
         }
-        window.addEventListener('resize', () => setTimeout(resizeCanvas, 100));
-        resizeCanvas();
-
-        // === GRID FUNKTIONEN ===
-        function generateWords(lat, lng) {
-            const hash = Math.abs(Math.floor((lat * 10000) * (lng * 10000) * 997)) % 10000;
-            return `${DICTS.alpha[hash % 12]}.${DICTS.beta[(hash >> 4) % 12]}.${DICTS.gamma[(hash >> 8) % 12]}`;
+        
+        if (state.isGridActive && map.getZoom() >= CONFIG.GRID_ZOOM && !state.gmActive) {
+            drawGrid();
         }
+        if (state.gmActive) updateGMOverlayPosition();
+    }
 
-        function getSectorBounds(lat, lng) {
-            const latSector = Math.floor(lat / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-            const lngSector = Math.floor(lng / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-            return {
-                north: latSector + CONFIG.SECTOR_SIZE,
-                south: latSector,
-                east: lngSector + CONFIG.SECTOR_SIZE,
-                west: lngSector,
-                centerLat: latSector + (CONFIG.SECTOR_SIZE / 2),
-                centerLng: lngSector + (CONFIG.SECTOR_SIZE / 2)
-            };
+    window.addEventListener('resize', () => {
+        clearTimeout(state.resizeTimeout);
+        state.resizeTimeout = setTimeout(resizeCanvas, 100);
+    });
+
+    function clearCanvas() {
+        const rect = document.getElementById('mapZone').getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+    }
+
+    // === GRID FUNCTIONS ===
+    function generateWords(lat, lng) {
+        // Normalize coordinates for consistent hashing
+        const normLat = ((lat % 90) + 90) % 90;
+        const normLng = ((lng % 180) + 180) % 180;
+        const hash = Math.abs(Math.floor((normLat * 10000) * (normLng * 10000) * 997)) % 10000;
+        return `${DICTS.alpha[hash % 12]}.${DICTS.beta[(hash >> 4) % 12]}.${DICTS.gamma[(hash >> 8) % 12]}`;
+    }
+
+    function getSectorBounds(lat, lng) {
+        // Handle negative coordinates correctly for sector calculation
+        const latSector = Math.floor(lat / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+        const lngSector = Math.floor(lng / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+        return {
+            north: latSector + CONFIG.SECTOR_SIZE,
+            south: latSector,
+            east: lngSector + CONFIG.SECTOR_SIZE,
+            west: lngSector,
+            centerLat: latSector + (CONFIG.SECTOR_SIZE / 2),
+            centerLng: lngSector + (CONFIG.SECTOR_SIZE / 2)
+        };
+    }
+
+    function formatCoords(lat, lng) {
+        return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+
+    function drawGrid() {
+        if (!state.isGridActive || state.gmActive) return;
+
+        const rect = document.getElementById('mapZone').getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        ctx.clearRect(0, 0, width, height);
+
+        const bounds = map.getBounds();
+        const startLat = Math.floor(bounds.getSouth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+        const endLat = Math.ceil(bounds.getNorth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+        const startLng = Math.floor(bounds.getWest() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+        const endLng = Math.ceil(bounds.getEast() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
+
+        const latLines = Math.ceil((endLat - startLat) / CONFIG.SECTOR_SIZE);
+        const lngLines = Math.ceil((endLng - startLng) / CONFIG.SECTOR_SIZE);
+
+        if (latLines > CONFIG.MAX_GRID_LINES || lngLines > CONFIG.MAX_GRID_LINES) return;
+
+        ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
+        ctx.lineWidth = 1.0;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = 'rgba(0, 212, 255, 0.3)';
+
+        ctx.beginPath();
+        for (let lng = startLng; lng <= endLng; lng += CONFIG.SECTOR_SIZE) {
+            const start = map.latLngToContainerPoint([bounds.getNorth(), lng]);
+            const end = map.latLngToContainerPoint([bounds.getSouth(), lng]);
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
         }
-
-        function formatCoords(lat, lng) {
-            return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        for (let lat = startLat; lat <= endLat; lat += CONFIG.SECTOR_SIZE) {
+            const start = map.latLngToContainerPoint([lat, bounds.getWest()]);
+            const end = map.latLngToContainerPoint([lat, bounds.getEast()]);
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
         }
+        ctx.stroke();
+    }
 
-        function drawGrid() {
-            if (!state.isGridActive || state.gmActive) return;
-            
-            const width = canvas.width / window.devicePixelRatio;
-            const height = canvas.height / window.devicePixelRatio;
-            ctx.clearRect(0, 0, width, height);
-            
-            const bounds = map.getBounds();
-            const startLat = Math.floor(bounds.getSouth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-            const endLat = Math.ceil(bounds.getNorth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-            const startLng = Math.floor(bounds.getWest() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-            const endLng = Math.ceil(bounds.getEast() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-            
-            const latLines = Math.ceil((endLat - startLat) / CONFIG.SECTOR_SIZE);
-            const lngLines = Math.ceil((endLng - startLng) / CONFIG.SECTOR_SIZE);
-            
-            if (latLines > 100 || lngLines > 100) return;
-            
-            ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
-            ctx.lineWidth = 1.5;
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = 'rgba(0, 212, 255, 0.3)';
-            
-            ctx.beginPath();
-            for (let lng = startLng; lng <= endLng; lng += CONFIG.SECTOR_SIZE) {
-                const start = map.latLngToContainerPoint([bounds.getNorth(), lng]);
-                const end = map.latLngToContainerPoint([bounds.getSouth(), lng]);
-                ctx.moveTo(start.x, start.y);
-                ctx.lineTo(end.x, end.y);
-            }
-            for (let lat = startLat; lat <= endLat; lat += CONFIG.SECTOR_SIZE) {
-                const start = map.latLngToContainerPoint([lat, bounds.getWest()]);
-                const end = map.latLngToContainerPoint([lat, bounds.getEast()]);
-                ctx.moveTo(start.x, start.y);
-                ctx.lineTo(end.x, end.y);
-            }
-            ctx.stroke();
+    // === GOOGLE MAPS INTEGRATION ===
+    function activateGoogleMaps() {
+        if (!state.selectedSector && !state.currentCoords) return;
+
+        const sector = state.selectedSector || getSectorBounds(state.currentCoords.lat, state.currentCoords.lng);
+        if (map.getZoom() < CONFIG.GRID_ZOOM) {
+            showToast('ZOOM IN TO ACTIVATE GM');
+            return;
         }
+        createGMOverlay(sector);
+        updateHeaderStatus(true);
+    }
 
-        // === GOOGLE MAPS INTEGRATION ===
-        function activateGoogleMaps(e) {
-            if (e) e.stopPropagation();
-            
-            if (!state.selectedSector && !state.currentCoords) return;
-            
-            const sector = state.selectedSector || getSectorBounds(state.currentCoords.lat, state.currentCoords.lng);
-            const centerLat = sector.centerLat;
-            const centerLng = sector.centerLng;
-            
-            // Prüfe ob Zoom hoch genug
-            if (map.getZoom() < CONFIG.GRID_ZOOM) {
-                showToast('ZOOM IN TO ACTIVATE GM');
-                return;
-            }
-            
-            createGMOverlay(sector);
-            updateHeaderStatus(true);
-        }
+    function createGMOverlay(sector) {
+        closeGMLayer();
 
-        function createGMOverlay(sector) {
-            // Entferne bestehendes Overlay
-            closeGMLayer();
-            
-            state.gmActive = true;
-            state.gmSector = sector;
-            
-            const container = document.getElementById('mapZone');
-            const overlay = document.createElement('div');
-            overlay.className = 'gm-sector-overlay';
-            overlay.id = 'gmActiveOverlay';
-            
-            // Berechne Pixel-Position
-            const nw = map.latLngToContainerPoint([sector.north, sector.west]);
-            const se = map.latLngToContainerPoint([sector.south, sector.east]);
-            const width = se.x - nw.x;
-            const height = se.y - nw.y;
-            
-            // Mindestgröße prüfen
-            if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX) {
-                showToast('SECTOR TOO SMALL');
-                state.gmActive = false;
-                return;
-            }
-            
-            overlay.style.left = nw.x + 'px';
-            overlay.style.top = nw.y + 'px';
-            overlay.style.width = width + 'px';
-            overlay.style.height = height + 'px';
-            
-            // Google Maps Embed URL
-            // Verwende Satellitenansicht mit Gelände (p für Terrain)
-            const gmUrl = `https://www.google.com/maps/embed?pb=!1m10!1m8!1m3!1d1!2d${sector.centerLng}!3d${sector.centerLat}!3m2!1i1024!2i768!4f13.1!5e1!3m2!1sen!2sus!4v1`;
-            // Alternative direkte URL mit Satellit:
-            const gmSatUrl = `https://www.google.com/maps?q=${sector.centerLat},${sector.centerLng}&z=20&t=k&output=embed`;
-            
-            overlay.innerHTML = `
-                <div class="gm-loading">LOADING SAT...</div>
-                <button class="gm-close-btn" onclick="closeGMLayer()">×</button>
-                <iframe src="${gmSatUrl}" 
-                        allowfullscreen="" 
-                        loading="lazy" 
-                        referrerpolicy="no-referrer-when-downgrade"
-                        onload="this.parentElement.classList.add('loaded'); this.previousElementSibling.style.display='none';">
-                </iframe>
-            `;
-            
-            container.appendChild(overlay);
-            state.gmOverlay = overlay;
-            
-            // UI Updates
-            document.getElementById('gridCanvas').style.opacity = '0.1';
-            document.getElementById('sectorSelector').classList.add('gm-active-sector');
-            document.getElementById('gmResetBtn').style.display = 'inline-block';
-            
-            triggerHaptic([100, 50, 100]);
-            showToast('SATELLITE FEED ACTIVE');
-        }
+        state.gmActive = true;
+        state.gmSector = sector;
 
-        function updateGMOverlayPosition() {
-            if (!state.gmActive || !state.gmOverlay || !state.gmSector) return;
-            
-            const sector = state.gmSector;
-            const nw = map.latLngToContainerPoint([sector.north, sector.west]);
-            const se = map.latLngToContainerPoint([sector.south, sector.east]);
-            const width = se.x - nw.x;
-            const height = se.y - nw.y;
-            
-            // Auto-close wenn zu klein oder zu weit außerhalb
-            if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX || 
-                nw.x > window.innerWidth || se.x < 0 || nw.y > window.innerHeight || se.y < 0) {
-                closeGMLayer();
-                return;
-            }
-            
-            state.gmOverlay.style.left = nw.x + 'px';
-            state.gmOverlay.style.top = nw.y + 'px';
-            state.gmOverlay.style.width = width + 'px';
-            state.gmOverlay.style.height = height + 'px';
-        }
+        const container = document.getElementById('mapZone');
+        const overlay = document.createElement('div');
+        overlay.className = 'gm-sector-overlay';
+        overlay.id = 'gmActiveOverlay';
 
-        function closeGMLayer() {
-            if (state.gmOverlay) {
-                state.gmOverlay.remove();
-                state.gmOverlay = null;
-            }
+        const nw = map.latLngToContainerPoint([sector.north, sector.west]);
+        const se = map.latLngToContainerPoint([sector.south, sector.east]);
+        const width = Math.max(se.x - nw.x, CONFIG.GM_MIN_SIZE_PX);
+        const height = Math.max(se.y - nw.y, CONFIG.GM_MIN_SIZE_PX);
+
+        if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX) {
+            showToast('SECTOR TOO SMALL');
             state.gmActive = false;
-            state.gmSector = null;
-            
-            document.getElementById('gridCanvas').style.opacity = '';
-            document.getElementById('sectorSelector').classList.remove('gm-active-sector');
-            document.getElementById('gmResetBtn').style.display = 'none';
-            
-            updateHeaderStatus(false);
-            
-            if (map.getZoom() >= CONFIG.GRID_ZOOM) {
-                drawGrid();
-            }
+            return;
         }
 
-        function updateHeaderStatus(gmActive) {
-            const dot = document.getElementById('pulseDot');
-            const status = document.getElementById('gridStatus');
-            const title = document.getElementById('headerTitle');
-            
-            if (gmActive) {
-                dot.classList.add('gm-mode');
-                status.classList.add('gm-active');
-                status.textContent = 'SATELLITE LINK ACTIVE // REDIRECTED';
-                title.textContent = 'SPECTER-GM';
-                title.style.color = 'var(--alert-red)';
-            } else {
-                dot.classList.remove('gm-mode');
-                status.classList.remove('gm-active');
-                status.textContent = 'PRECISION GRID // HOLD TO DECRYPT';
-                title.textContent = 'SPECTER';
-                title.style.color = 'var(--matrix-green)';
-            }
+        overlay.style.left = nw.x + 'px';
+        overlay.style.top = nw.y + 'px';
+        overlay.style.width = width + 'px';
+        overlay.style.height = height + 'px';
+
+        // Google Maps Embed URL (may be blocked by X-Frame-Options on some networks)
+        const gmSatUrl = `https://www.google.com/maps?q=${sector.centerLat},${sector.centerLng}&z=20&t=k&output=embed`;
+        const externalUrl = `https://www.google.com/maps?q=${sector.centerLat},${sector.centerLng}&z=20&t=k`;
+
+        overlay.innerHTML = `
+            <div class="gm-loading">LOADING SAT...</div>
+            <div class="gm-error">
+                SATELLITE FEED BLOCKED<br>
+                <a href="${externalUrl}" target="_blank" style="color: var(--alert-red); text-decoration: underline; display: inline-block; margin-top: 10px;">OPEN EXTERNALLY</a>
+            </div>
+            <button class="gm-close-btn" onclick="closeGMLayer()">×</button>
+            <a href="${externalUrl}" target="_blank" class="gm-external-btn">OPEN IN GOOGLE MAPS</a>
+            <iframe src="${gmSatUrl}"
+                    allowfullscreen=""
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                    onload="this.parentElement.classList.add('loaded'); this.previousElementSibling.previousElementSibling.style.display='none';"
+                    onerror="this.parentElement.classList.add('error');">
+            </iframe>
+        `;
+
+        // Prevent Leaflet from intercepting events on the overlay
+        L.DomEvent.disableClickPropagation(overlay);
+        L.DomEvent.disableScrollPropagation(overlay);
+
+        container.appendChild(overlay);
+        state.gmOverlay = overlay;
+
+        document.getElementById('gridCanvas').style.opacity = '0.1';
+        document.getElementById('sectorSelector').classList.add('gm-active-sector');
+        document.getElementById('gmResetBtn').style.display = 'inline-block';
+
+        triggerHaptic([100, 50, 100]);
+        showToast('SATELLITE FEED ACTIVE');
+    }
+
+    function updateGMOverlayPosition() {
+        if (!state.gmActive || !state.gmOverlay || !state.gmSector) return;
+
+        const sector = state.gmSector;
+        const nw = map.latLngToContainerPoint([sector.north, sector.west]);
+        const se = map.latLngToContainerPoint([sector.south, sector.east]);
+        const width = se.x - nw.x;
+        const height = se.y - nw.y;
+
+        // Close if too small or out of viewport
+        if (width < CONFIG.GM_MIN_SIZE_PX || height < CONFIG.GM_MIN_SIZE_PX ||
+            nw.x > window.innerWidth || se.x < 0 || nw.y > window.innerHeight || se.y < 0) {
+            closeGMLayer();
+            return;
         }
 
-        // === TOUCH & HOLD LOGIC ===
-        const mapZone = document.getElementById('mapZone');
-        const holdIndicator = document.getElementById('holdIndicator');
-        const holdProgress = document.getElementById('holdProgress');
-        const tempLabel = document.getElementById('sectorLabelTemp');
+        state.gmOverlay.style.left = nw.x + 'px';
+        state.gmOverlay.style.top = nw.y + 'px';
+        state.gmOverlay.style.width = width + 'px';
+        state.gmOverlay.style.height = height + 'px';
+    }
 
-        function startLongPress(e) {
-            if (state.gmActive) return; // Kein Long Press wenn GM aktiv
-            
-            if (!state.isGridActive || map.getZoom() < CONFIG.GRID_ZOOM) return;
-            
-            map.dragging.disable();
-            
-            const touch = e.touches[0];
-            state.touchStartPos = { x: touch.clientX, y: touch.clientY };
-            state.touchStartTime = Date.now();
-            state.isLongPress = false;
-            state.isHolding = true;
-            
-            holdIndicator.style.left = touch.clientX + 'px';
-            holdIndicator.style.top = touch.clientY + 'px';
-            holdIndicator.classList.add('active');
-            holdIndicator.classList.remove('complete');
-            
-            holdProgress.style.transition = 'none';
-            holdProgress.style.strokeDashoffset = '126';
-            holdProgress.getBoundingClientRect();
-            
-            setTimeout(() => {
-                if (state.isHolding) {
-                    holdProgress.style.transition = `stroke-dashoffset ${CONFIG.LONG_PRESS_DURATION}ms linear`;
-                    holdProgress.style.strokeDashoffset = '0';
-                }
-            }, 10);
-            
-            state.longPressTimer = setTimeout(() => {
-                completeLongPress(e);
-            }, CONFIG.LONG_PRESS_DURATION);
-            
-            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
-            const sector = getSectorBounds(latlng.lat, latlng.lng);
-            selectSectorVisual(sector, true);
+    function closeGMLayer() {
+        if (state.gmOverlay) {
+            state.gmOverlay.remove();
+            state.gmOverlay = null;
         }
+        state.gmActive = false;
+        state.gmSector = null;
 
-        function moveLongPress(e) {
-            if (!state.isHolding) return;
-            
-            const touch = e.touches[0];
-            const dx = touch.clientX - state.touchStartPos.x;
-            const dy = touch.clientY - state.touchStartPos.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance > 20) {
-                cancelLongPress();
-                map.dragging.enable();
-                return;
-            }
-            
-            holdIndicator.style.left = touch.clientX + 'px';
-            holdIndicator.style.top = touch.clientY + 'px';
+        document.getElementById('gridCanvas').style.opacity = '';
+        document.getElementById('sectorSelector').classList.remove('gm-active-sector');
+        document.getElementById('gmResetBtn').style.display = 'none';
+
+        updateHeaderStatus(false);
+
+        if (map.getZoom() >= CONFIG.GRID_ZOOM && state.isGridActive) {
+            drawGrid();
         }
+    }
 
-        function endLongPress(e) {
-            if (!state.isHolding) {
-                map.dragging.enable();
-                return;
+    function updateHeaderStatus(gmActive) {
+        const dot = document.getElementById('pulseDot');
+        const status = document.getElementById('gridStatus');
+        const title = document.getElementById('headerTitle');
+
+        if (gmActive) {
+            dot.classList.add('gm-mode');
+            status.classList.add('gm-active');
+            status.textContent = 'SATELLITE LINK ACTIVE // REDIRECTED';
+            title.textContent = 'SPECTER-GM';
+            title.style.color = 'var(--alert-red)';
+        } else {
+            dot.classList.remove('gm-mode');
+            status.classList.remove('gm-active');
+            status.textContent = 'PRECISION GRID // HOLD TO DECRYPT';
+            title.textContent = 'SPECTER';
+            title.style.color = 'var(--matrix-green)';
+        }
+    }
+
+    // === TOUCH & HOLD LOGIC ===
+    const mapZone = document.getElementById('mapZone');
+    const holdIndicator = document.getElementById('holdIndicator');
+    const holdProgress = document.getElementById('holdProgress');
+    const tempLabel = document.getElementById('sectorLabelTemp');
+    const sectorSelector = document.getElementById('sectorSelector');
+
+    function triggerHaptic(pattern) {
+        if (navigator.vibrate) {
+            navigator.vibrate(pattern);
+        }
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1600);
+    }
+
+    function selectSectorVisual(sector, holdMode) {
+        const nw = map.latLngToContainerPoint([sector.north, sector.west]);
+        const se = map.latLngToContainerPoint([sector.south, sector.east]);
+        const width = Math.max(se.x - nw.x, 2); // Min width 2px
+        const height = Math.max(se.y - nw.y, 2);
+
+        sectorSelector.style.left = nw.x + 'px';
+        sectorSelector.style.top = nw.y + 'px';
+        sectorSelector.style.width = width + 'px';
+        sectorSelector.style.height = height + 'px';
+        sectorSelector.classList.add('active');
+
+        if (holdMode) {
+            sectorSelector.classList.add('hold-mode');
+        } else {
+            sectorSelector.classList.remove('hold-mode');
+        }
+    }
+
+    function startLongPress(e) {
+        if (state.gmActive) return;
+        if (!state.isGridActive || map.getZoom() < CONFIG.GRID_ZOOM) return;
+
+        // Prevent default only if we might trigger long press
+        const touch = e.touches[0];
+        state.touchStartPos = { x: touch.clientX, y: touch.clientY };
+        state.touchStartTime = Date.now();
+        state.isLongPress = false;
+        state.isHolding = true;
+
+        // Disable map dragging to prevent movement while holding
+        map.dragging.disable();
+
+        holdIndicator.style.left = touch.clientX + 'px';
+        holdIndicator.style.top = touch.clientY + 'px';
+        holdIndicator.classList.add('active');
+        holdIndicator.classList.remove('complete');
+
+        // Reset and start animation
+        holdProgress.style.transition = 'none';
+        holdProgress.style.strokeDashoffset = '126';
+        
+        // Force reflow
+        void holdProgress.getBoundingClientRect();
+
+        setTimeout(() => {
+            if (state.isHolding) {
+                holdProgress.style.transition = `stroke-dashoffset ${CONFIG.LONG_PRESS_DURATION}ms linear`;
+                holdProgress.style.strokeDashoffset = '0';
             }
-            
-            const wasLongPress = state.isLongPress;
+        }, 10);
+
+        state.longPressTimer = setTimeout(() => {
+            completeLongPress(e);
+        }, CONFIG.LONG_PRESS_DURATION);
+
+        const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+        const sector = getSectorBounds(latlng.lat, latlng.lng);
+        selectSectorVisual(sector, true);
+    }
+
+    function moveLongPress(e) {
+        if (!state.isHolding) return;
+
+        const touch = e.touches[0];
+        const dx = touch.clientX - state.touchStartPos.x;
+        const dy = touch.clientY - state.touchStartPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Cancel if moved too far
+        if (distance > 20) {
             cancelLongPress();
             map.dragging.enable();
-            
-            if (wasLongPress) {
-                hideTempLabel();
-                e.preventDefault();
-                e.stopPropagation();
-            } else {
-                const currentTime = Date.now();
-                const timeDiff = currentTime - state.lastTapTime;
-                
-                if (timeDiff < CONFIG.DOUBLE_TAP_DELAY && state.touchCount === 1) {
-                    clearTimeout(state.longPressTimer);
-                    const touch = e.changedTouches[0];
-                    const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
-                    const sector = getSectorBounds(latlng.lat, latlng.lng);
-                    showPermanentLabel(sector);
-                    state.touchCount = 0;
-                } else {
-                    state.touchCount = 1;
-                    state.longPressTimer = setTimeout(() => {
-                        state.touchCount = 0;
-                    }, CONFIG.DOUBLE_TAP_DELAY);
-                    
-                    const touch = e.changedTouches[0];
-                    const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
-                    const sector = getSectorBounds(latlng.lat, latlng.lng);
-                    selectSectorVisual(sector, false);
-                }
-                state.lastTapTime = currentTime;
-            }
+            return;
         }
 
-        function completeLongPress(e) {
-            state.isLongPress = true;
-            state.isHolding = false;
-            holdIndicator.classList.add('complete');
-            
-            const touch = e.touches[0];
-            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
-            const sector = getSectorBounds(latlng.lat, latlng.lng);
-            
-            showTempLabel(sector, touch.clientX, touch.clientY);
-            triggerHaptic([50, 30]);
-        }
+        holdIndicator.style.left = touch.clientX + 'px';
+        holdIndicator.style.top = touch.clientY + 'px';
+    }
 
-        function cancelLongPress() {
-            state.isHolding = false;
-            state.isLongPress = false;
-            clearTimeout(state.longPressTimer);
-            holdIndicator.classList.remove('active');
-            holdProgress.style.transition = 'none';
-            document.getElementById('sectorSelector').classList.remove('hold-mode');
-        }
+    function endLongPress(e) {
+        const wasLongPress = state.isLongPress;
+        const wasHolding = state.isHolding;
+        
+        cancelLongPress();
+        map.dragging.enable();
 
-        // === LABEL FUNKTIONEN ===
-        function showTempLabel(sector, x, y) {
-            const words = generateWords(sector.centerLat, sector.centerLng);
-            const coords = formatCoords(sector.centerLat, sector.centerLng);
-            
-            document.getElementById('labelWordsTemp').textContent = words;
-            document.getElementById('tempCoords').textContent = coords;
-            
-            state.currentCoords = { lat: sector.centerLat, lng: sector.centerLng };
-            
-            tempLabel.style.left = x + 'px';
-            tempLabel.style.top = y + 'px';
-            tempLabel.classList.add('visible');
-            
-            triggerHaptic(40);
-        }
-
-        function hideTempLabel() {
-            tempLabel.classList.remove('visible');
-        }
-
-        function showPermanentLabel(sector) {
-            state.selectedSector = sector;
-            state.currentWords = generateWords(sector.centerLat, sector.centerLng);
-            state.currentCoords = { lat: sector.centerLat, lng: sector.centerLng };
-            
-            const label = document.getElementById('sectorLabel');
-            document.getElementById('labelWords').textContent = state.currentWords;
-            document.getElementById('permCoords').textContent = formatCoords(sector.centerLat, sector.centerLng);
-            document.getElementById('accuracy').textContent = `ACC: ±${Math.round(CONFIG.SECTOR_SIZE * 111000)}m`;
-            
-            const milRef = `${String.fromCharCode(65 + (Math.floor(sector.centerLat) % 26))}${Math.abs(Math.floor(sector.centerLng))}`;
-            document.getElementById('militaryRef').textContent = `REF: ${milRef}`;
-            
-            const center = map.latLngToContainerPoint([sector.centerLat, sector.centerLng]);
-            label.style.left = center.x + 'px';
-            label.style.top = center.y + 'px';
-            label.classList.add('visible');
-            
-            triggerHaptic([50, 30, 50]);
-        }
-
-        function selectSectorVisual(sector, isHold) {
-            const selector = document.getElementById('sectorSelector');
-            const nw = map.latLngToContainerPoint([sector.north, sector.west]);
-            const se = map.latLngToContainerPoint([sector.south, sector.east]);
-            
-            selector.style.left = nw.x + 'px';
-            selector.style.top = nw.y + 'px';
-            selector.style.width = (se.x - nw.x) + 'px';
-            selector.style.height = (se.y - nw.y) + 'px';
-            selector.classList.add('active');
-            
-            if (isHold) {
-                selector.classList.add('hold-mode');
-            } else {
-                selector.classList.remove('hold-mode');
-            }
-        }
-
-        function clearSelection() {
-            document.getElementById('sectorSelector').classList.remove('active');
-            document.getElementById('sectorLabel').classList.remove('visible');
+        if (wasLongPress) {
             hideTempLabel();
-            state.selectedSector = null;
-            state.currentWords = '';
-            state.currentCoords = null;
-            closeGMLayer();
-        }
+            e.preventDefault();
+            e.stopPropagation();
+        } else if (wasHolding) {
+            const currentTime = Date.now();
+            const timeDiff = currentTime - state.lastTapTime;
 
-        // === UTILITIES ===
-        function triggerHaptic(pattern) {
-            if (navigator.vibrate) navigator.vibrate(pattern);
-        }
+            const touch = e.changedTouches[0];
+            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+            
+            // Validate coordinates
+            if (!latlng || isNaN(latlng.lat) || isNaN(latlng.lng)) return;
+            
+            const sector = getSectorBounds(latlng.lat, latlng.lng);
 
-        function showToast(msg) {
-            const toast = document.getElementById('toast');
-            toast.textContent = msg;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2500);
+            if (timeDiff < CONFIG.DOUBLE_TAP_DELAY && state.touchCount === 1) {
+                showPermanentLabel(sector);
+                state.touchCount = 0;
+            } else {
+                state.touchCount = 1;
+                state.lastTapTime = currentTime;
+                selectSectorVisual(sector, false);
+                
+                // Reset touch count after delay
+                clearTimeout(state.longPressTimer);
+                state.longPressTimer = setTimeout(() => {
+                    state.touchCount = 0;
+                }, CONFIG.DOUBLE_TAP_DELAY);
+            }
         }
+    }
 
-        function copySectorData() {
-            if (!state.currentWords) return;
-            const text = `GRID: ${state.currentWords} | REF: ${document.getElementById('militaryRef').textContent} | COORDS: ${formatCoords(state.currentCoords.lat, state.currentCoords.lng)}`;
-            navigator.clipboard.writeText(text).then(() => showToast('COPIED TO CLIPBOARD'));
+    function completeLongPress(e) {
+        state.isLongPress = true;
+        state.isHolding = false;
+        holdIndicator.classList.add('complete');
+
+        const touch = e.touches[0];
+        const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
+        
+        if (!latlng || isNaN(latlng.lat) || isNaN(latlng.lng)) return;
+        
+        const sector = getSectorBounds(latlng.lat, latlng.lng);
+
+        showTempLabel(sector, touch.clientX, touch.clientY);
+        triggerHaptic([50, 30]);
+    }
+
+    function cancelLongPress() {
+        state.isHolding = false;
+        state.isLongPress = false;
+        clearTimeout(state.longPressTimer);
+        holdIndicator.classList.remove('active');
+        holdProgress.style.transition = 'none';
+        sectorSelector.classList.remove('hold-mode');
+    }
+
+    // === LABEL FUNCTIONS ===
+    function showTempLabel(sector, x, y) {
+        const words = generateWords(sector.centerLat, sector.centerLng);
+        const coords = formatCoords(sector.centerLat, sector.centerLng);
+
+        document.getElementById('labelWordsTemp').textContent = words;
+        document.getElementById('tempCoords').textContent = coords;
+
+        state.currentCoords = { lat: sector.centerLat, lng: sector.centerLng };
+
+        tempLabel.style.left = x + 'px';
+        tempLabel.style.top = y + 'px';
+        tempLabel.classList.add('visible');
+
+        triggerHaptic(40);
+    }
+
+    function hideTempLabel() {
+        tempLabel.classList.remove('visible');
+    }
+
+    function showPermanentLabel(sector) {
+        state.selectedSector = sector;
+        state.currentWords = generateWords(sector.centerLat, sector.centerLng);
+        state.currentCoords = { lat: sector.centerLat, lng: sector.centerLng };
+
+        const label = document.getElementById('sectorLabel');
+        document.getElementById('labelWords').textContent = state.currentWords;
+        document.getElementById('permCoords').textContent = formatCoords(sector.centerLat, sector.centerLng);
+        document.getElementById('accuracy').textContent = `ACC: ±${Math.round(CONFIG.SECTOR_SIZE * 111000)}m`;
+
+        const milRef = `${String.fromCharCode(65 + ((Math.floor(sector.centerLat) % 26 + 26) % 26))}${Math.abs(Math.floor(sector.centerLng))}`;
+        document.getElementById('militaryRef').textContent = `REF: ${milRef}`;
+
+        const centerPoint = map.latLngToContainerPoint([sector.centerLat, sector.centerLng]);
+        label.style.left = centerPoint.x + 'px';
+        label.style.top = centerPoint.y + 'px';
+        label.classList.add('visible');
+
+        triggerHaptic([30]);
+    }
+
+    function clearSelection() {
+        state.selectedSector = null;
+        state.currentWords = '';
+        state.currentCoords = null;
+        document.getElementById('sectorLabel').classList.remove('visible');
+        tempLabel.classList.remove('visible');
+        sectorSelector.classList.remove('active');
+        closeGMLayer();
+    }
+
+    function resetView() {
+        map.setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
+        clearSelection();
+    }
+
+    function copySectorData() {
+        if (!state.currentCoords) {
+            showToast('NO SECTOR SELECTED');
+            return;
         }
+        const data = `${state.currentWords} :: ${formatCoords(state.currentCoords.lat, state.currentCoords.lng)}`;
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(data).then(() => {
+                showToast('SECTOR COPIED');
+            }).catch(() => {
+                // Fallback
+                const textArea = document.createElement("textarea");
+                textArea.value = data;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showToast('SECTOR COPIED');
+            });
+        } else {
+            showToast('CLIPBOARD UNSUPPORTED');
+        }
+    }
 
-        async function shareSector() {
-            if (!state.currentWords) return;
-            if (navigator.share) {
-                await navigator.share({ 
-                    title: 'SPECTER GRID', 
-                    text: `Sector: ${state.currentWords} | Coords: ${formatCoords(state.currentCoords.lat, state.currentCoords.lng)}` 
+    function shareSector() {
+        if (!state.currentCoords) {
+            showToast('NO SECTOR SELECTED');
+            return;
+        }
+        const text = `${state.currentWords} :: ${formatCoords(state.currentCoords.lat, state.currentCoords.lng)}`;
+        const url = `https://www.google.com/maps?q=${state.currentCoords.lat},${state.currentCoords.lng}&z=19&t=k`;
+        const shareText = `${text}\n${url}`;
+
+        if (navigator.share) {
+            navigator.share({
+                title: 'SPECTER SECTOR',
+                text: shareText,
+                url: url
+            }).catch(() => {
+                showToast('SHARE CANCELLED');
+            });
+        } else {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(shareText).then(() => {
+                    showToast('SHARE LINK COPIED');
+                }).catch(() => {
+                    showToast('COPY FAILED');
                 });
             } else {
-                copySectorData();
+                showToast('SHARE UNSUPPORTED');
             }
         }
+    }
 
-        // === EVENTS ===
-        mapZone.addEventListener('touchstart', startLongPress, { passive: false });
-        mapZone.addEventListener('touchmove', moveLongPress, { passive: false });
-        mapZone.addEventListener('touchend', endLongPress, { passive: false });
-        mapZone.addEventListener('touchcancel', cancelLongPress);
+    // === EVENT WIRING ===
+    
+    // Use passive listeners for touchstart/move for better scroll performance, 
+    // but we need to prevent default on touchend for double-tap logic
+    mapZone.addEventListener('touchstart', startLongPress, { passive: true });
+    mapZone.addEventListener('touchmove', moveLongPress, { passive: true });
+    mapZone.addEventListener('touchend', endLongPress, { passive: false });
+    mapZone.addEventListener('touchcancel', () => {
+        cancelLongPress();
+        map.dragging.enable();
+    });
 
-        mapZone.addEventListener('mousedown', (e) => {
-            if (state.gmActive) return;
-            if (e.button !== 0) return;
-            map.dragging.disable();
-            const touch = { 
-                touches: [{ clientX: e.clientX, clientY: e.clientY }],
-                clientX: e.clientX, 
-                clientY: e.clientY 
-            };
-            startLongPress(touch);
-        });
+    // Mouse support for desktop testing
+    mapZone.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return; // Only left click
+        const touch = { clientX: e.clientX, clientY: e.clientY };
+        startLongPress({ touches: [touch] });
         
-        mapZone.addEventListener('mousemove', (e) => {
-            if (!state.isHolding) return;
-            const touch = { 
-                touches: [{ clientX: e.clientX, clientY: e.clientY }],
-                clientX: e.clientX, 
-                clientY: e.clientY 
-            };
-            moveLongPress(touch);
-        });
+        const mouseMove = (ev) => {
+            moveLongPress({ touches: [{ clientX: ev.clientX, clientY: ev.clientY }] });
+        };
         
-        mapZone.addEventListener('mouseup', (e) => {
-            if (!state.isHolding) {
-                map.dragging.enable();
-                return;
-            }
-            const touch = { changedTouches: [{ clientX: e.clientX, clientY: e.clientY }] };
-            endLongPress(touch);
-            map.dragging.enable();
-        });
+        const mouseUp = (ev) => {
+            document.removeEventListener('mousemove', mouseMove);
+            document.removeEventListener('mouseup', mouseUp);
+            endLongPress({ changedTouches: [{ clientX: ev.clientX, clientY: ev.clientY }], preventDefault: () => {}, stopPropagation: () => {} });
+        };
         
-        mapZone.addEventListener('mouseleave', () => {
-            if (state.isHolding) {
-                cancelLongPress();
-                map.dragging.enable();
-            }
-        });
+        document.addEventListener('mousemove', mouseMove);
+        document.addEventListener('mouseup', mouseUp);
+    });
 
-        map.on('zoom', function() {
-            const zoom = map.getZoom();
-            document.getElementById('zoomLevel').textContent = zoom;
-            
-            // Auto-close GM wenn Zoom zu niedrig
-            if (state.gmActive && zoom < CONFIG.GM_MIN_ZOOM) {
-                closeGMLayer();
-                showToast('GM DISCONNECTED - ZOOM LEVEL INSUFFICIENT');
-            }
-            
-            const active = zoom >= CONFIG.GRID_ZOOM;
-            state.isGridActive = active;
-            document.getElementById('gridCanvas').classList.toggle('visible', active);
-            document.getElementById('gridStatus').classList.toggle('active', active && !state.gmActive);
-            
-            const guide = document.getElementById('touchGuide');
-            if (active && !state.gmActive) {
-                guide.textContent = 'HOLD SECTOR TO DECRYPT';
-                guide.classList.add('visible');
-                setTimeout(() => guide.classList.remove('visible'), 3000);
-                drawGrid();
-            } else if (!active && !state.gmActive) {
-                guide.classList.remove('visible');
-                clearSelection();
-            }
-        });
+    document.getElementById('tempCoords').addEventListener('click', (e) => {
+        e.stopPropagation();
+        activateGoogleMaps();
+    });
 
-        map.on('move', function() {
-            drawGrid();
-            updateGMOverlayPosition();
-            
-            // Prüfe ob permanente Labels repositioniert werden müssen
-            if (state.selectedSector) {
-                const center = map.latLngToContainerPoint([state.selectedSector.centerLat, state.selectedSector.centerLng]);
-                const label = document.getElementById('sectorLabel');
-                if (label.classList.contains('visible')) {
-                    label.style.left = center.x + 'px';
-                    label.style.top = center.y + 'px';
-                }
-            }
-        });
+    document.getElementById('permCoords').addEventListener('click', (e) => {
+        e.stopPropagation();
+        activateGoogleMaps();
+    });
 
-        function resetView() {
-            closeGMLayer();
-            map.flyTo(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM, { duration: 1.5 });
-            clearSelection();
-        }
+    document.getElementById('btnCopy').addEventListener('click', copySectorData);
+    document.getElementById('btnShare').addEventListener('click', shareSector);
+    document.getElementById('gmResetBtn').addEventListener('click', closeGMLayer);
 
-        // Init
+    document.getElementById('btnReset').addEventListener('click', resetView);
+    document.getElementById('btnZoomIn').addEventListener('click', () => map.zoomIn());
+    document.getElementById('btnZoomOut').addEventListener('click', () => map.zoomOut());
+    document.getElementById('btnClear').addEventListener('click', clearSelection);
+
+    // Show touch guide briefly on load
+    window.addEventListener('load', () => {
+        const guide = document.getElementById('touchGuide');
+        guide.classList.add('visible');
         setTimeout(() => {
-            const guide = document.getElementById('touchGuide');
-            guide.textContent = 'ZOOM TO LEVEL 19 TO ACTIVATE';
-            guide.classList.add('visible');
-            setTimeout(() => guide.classList.remove('visible'), 3000);
-        }, 1000);
-    </script>
+            guide.classList.remove('visible');
+        }, 3000);
+    });
+</script>
 </body>
 </html>
