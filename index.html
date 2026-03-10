@@ -2,1002 +2,376 @@
 <html lang="de" dir="ltr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#000000">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>OPERATION SPECTER | Precision Grid + W3W</title>
-    <meta name="timestamp" content="2026-03-11T20:45:00Z">
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-
+    <title>OPERATION SPECTER | W3W Integration</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Inter:wght@300;400;500;600&display=swap');
-
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap');
+        
         :root {
-            --bg-void: #000000;
-            --bg-deep: #020408;
+            --bg: #000000;
             --cyan: #00d4ff;
-            --cyan-dim: rgba(0, 212, 255, 0.2);
-            --matrix-green: #00ff41;
-            --matrix-glow: rgba(0, 255, 65, 0.4);
-            --alert-red: #ff0040;
-            --signal-white: #e0f7ff;
-            --signal-dim: #5a6b7b;
-            --watermark-fade: rgba(0, 255, 65, 0.03);
-            --w3w-gold: #ffeb99;
-            --w3w-glow: rgba(255, 235, 153, 0.3);
+            --green: #00ff41;
+            --gold: #ffeb99;
+            --red: #ff0040;
+            --dim: #5a6b7b;
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        
         body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-void);
-            color: var(--signal-white);
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            font-size: 14px;
-            touch-action: none;
-            overscroll-behavior: none;
-        }
-
-        .watermark-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        .watermark-text {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 8vw;
-            font-weight: 700;
-            color: var(--watermark-fade);
-            writing-mode: vertical-rl;
-            text-orientation: upright;
-            letter-spacing: 2vw;
-            transform: rotate(180deg);
-            text-shadow: 0 0 30px rgba(0, 255, 65, 0.1);
-            user-select: none;
-            pointer-events: none;
-            z-index: 1;
-        }
-
-        .watermark-timestamp {
-            position: fixed;
-            bottom: 80px;
-            right: 10px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.6rem;
-            color: var(--watermark-fade);
-            transform: rotate(-90deg);
-            transform-origin: right bottom;
-            letter-spacing: 2px;
-            z-index: 9999;
-            pointer-events: none;
-        }
-
-        .scanner-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 0;
-            opacity: 0.15;
-            background: linear-gradient(180deg, transparent 0%, rgba(0, 212, 255, 0.03) 50%, transparent 100%);
-            animation: scan 8s linear infinite;
-        }
-
-        @keyframes scan {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(100vh); }
-        }
-
-        .command-interface {
-            position: relative;
-            z-index: 10;
-            display: grid;
-            grid-template-rows: 50px 1fr 70px;
-            height: 100vh;
-            height: 100dvh;
-        }
-
-        .status-header {
-            grid-row: 1;
-            background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, transparent 100%);
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(0, 212, 255, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            font-family: 'JetBrains Mono', monospace;
-            z-index: 100;
-        }
-
-        .grid-status {
-            font-size: 0.75rem;
-            color: var(--signal-dim);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .grid-status.active {
-            opacity: 1;
-            color: var(--matrix-green);
-            text-shadow: 0 0 10px var(--matrix-green);
-        }
-
-        .grid-status.gm-active {
-            color: var(--alert-red);
-            text-shadow: 0 0 10px rgba(255, 0, 64, 0.5);
-            animation: pulse-red 2s infinite;
-        }
-
-        @keyframes pulse-red {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .pulse-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--matrix-green);
-            box-shadow: 0 0 10px var(--matrix-green);
-            animation: heartbeat 2s infinite;
-        }
-
-        .pulse-dot.gm-mode {
-            background: var(--alert-red);
-            box-shadow: 0 0 10px var(--alert-red);
-        }
-
-        @keyframes heartbeat {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.3; transform: scale(0.8); }
-        }
-
-        .map-zone {
-            grid-row: 2;
-            position: relative;
+            background: var(--bg);
+            color: white;
             overflow: hidden;
-            cursor: crosshair;
             touch-action: none;
         }
-
-        #map {
-            width: 100%;
-            height: 100%;
-            background: var(--bg-deep);
-            z-index: 5;
+        
+        #map { width: 100vw; height: 100vh; background: #020408; z-index: 1; }
+        
+        .scan-line {
+            position: fixed; top: 0; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+            opacity: 0.5; animation: scan 3s linear infinite; pointer-events: none; z-index: 10;
         }
-
-        #gridCanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 15;
-            opacity: 0;
-            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            will-change: opacity;
+        @keyframes scan { 0% { transform: translateY(-100vh); } 100% { transform: translateY(100vh); } }
+        
+        .sector-card {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+            background: rgba(0,0,0,0.95); border: 1px solid var(--green);
+            padding: 20px; border-radius: 4px; min-width: 280px; text-align: center;
+            opacity: 0; transition: all 0.3s; z-index: 100; pointer-events: auto;
+            box-shadow: 0 0 30px rgba(0,255,65,0.3);
         }
-
-        #gridCanvas.visible {
-            opacity: 1;
+        .sector-card.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        
+        .specter-code {
+            font-size: 1.3rem; color: var(--green); font-weight: 700;
+            text-shadow: 0 0 10px var(--green); margin-bottom: 8px; letter-spacing: 1px;
         }
-
-        .sector-label {
-            position: absolute;
-            pointer-events: auto;
-            z-index: 20;
-            background: rgba(0, 0, 0, 0.95);
-            border: 1px solid var(--matrix-green);
-            padding: 15px 20px;
-            border-radius: 4px;
-            box-shadow: 0 0 30px var(--matrix-glow);
-            transform: translate(-50%, -50%) scale(0.9);
-            opacity: 0;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            text-align: center;
-            min-width: 260px;
-            backdrop-filter: blur(10px);
+        
+        .w3w-box {
+            margin: 10px 0; padding: 8px; background: rgba(255,235,153,0.1);
+            border: 1px solid var(--gold); border-radius: 3px; opacity: 0;
+            transform: translateY(-5px); transition: all 0.3s;
         }
-
-        .sector-label.visible {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1);
+        .w3w-box.visible { opacity: 1; transform: translateY(0); }
+        .w3w-box.loading { opacity: 0.6; }
+        .w3w-label { font-size: 0.6rem; color: var(--dim); text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 4px; }
+        .w3w-words { color: var(--gold); font-size: 1rem; text-shadow: 0 0 5px rgba(255,235,153,0.5); }
+        
+        .coords { color: var(--cyan); font-size: 0.85rem; margin: 8px 0; cursor: pointer; padding: 6px; border: 1px solid rgba(0,212,255,0.3); border-radius: 3px; }
+        .coords:active { background: rgba(0,212,255,0.2); }
+        
+        .meta { font-size: 0.7rem; color: var(--dim); margin-top: 8px; display: flex; justify-content: space-between; border-top: 1px solid rgba(0,255,65,0.2); padding-top: 8px; }
+        
+        .actions { display: flex; gap: 8px; margin-top: 12px; }
+        button {
+            flex: 1; background: transparent; border: 1px solid var(--green); color: var(--green);
+            padding: 8px; font-family: inherit; font-size: 0.7rem; cursor: pointer; text-transform: uppercase;
         }
-
-        .sector-label .words {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 1.2rem;
-            color: var(--matrix-green);
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-shadow: 0 0 10px var(--matrix-green);
-            margin-bottom: 4px;
+        button:active { background: var(--green); color: black; }
+        button.w3w-btn { border-color: var(--gold); color: var(--gold); display: none; }
+        button.w3w-btn.visible { display: block; }
+        
+        .lang-bar {
+            position: fixed; top: 20px; left: 20px; z-index: 1000; display: flex; gap: 5px;
         }
-
-        /* NEU: what3words Anzeige */
-        .sector-label .w3w-display {
-            margin: 8px 0;
-            padding: 6px 10px;
-            background: rgba(255, 235, 153, 0.05);
-            border: 1px solid var(--w3w-gold);
-            border-radius: 3px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            color: var(--w3w-gold);
-            text-shadow: 0 0 5px var(--w3w-glow);
-            opacity: 0;
-            transform: translateY(-5px);
-            transition: all 0.3s ease;
-        }
-
-        .sector-label .w3w-display.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .sector-label .w3w-display .label {
-            font-size: 0.6rem;
-            color: var(--signal-dim);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 2px;
-            display: block;
-        }
-
-        .sector-label .w3w-display.loading {
-            opacity: 0.5;
-            font-style: italic;
-        }
-
-        .sector-label .coords-display {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            color: var(--cyan);
-            margin: 8px 0;
-            padding: 6px;
-            border: 1px solid var(--cyan-dim);
-            border-radius: 3px;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: rgba(0, 212, 255, 0.05);
-        }
-
-        .sector-label .coords-display:hover,
-        .sector-label .coords-display:active {
-            background: var(--cyan-dim);
-            box-shadow: 0 0 10px var(--cyan-dim);
-        }
-
-        .sector-label .meta {
-            font-size: 0.7rem;
-            color: var(--signal-dim);
-            font-family: 'JetBrains Mono', monospace;
-            border-top: 1px solid rgba(0, 255, 65, 0.2);
-            padding-top: 8px;
-            margin-top: 8px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .sector-label .actions {
-            margin-top: 12px;
-            display: flex;
-            gap: 8px;
-            justify-content: center;
-        }
-
-        .btn-copy {
-            background: rgba(0, 255, 65, 0.1);
-            border: 1px solid var(--matrix-green);
-            color: var(--matrix-green);
-            padding: 6px 12px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.65rem;
-            cursor: pointer;
-            border-radius: 2px;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            flex: 1;
-        }
-
-        .btn-copy:hover, .btn-copy:active {
-            background: var(--matrix-green);
-            color: #000;
-            box-shadow: 0 0 15px var(--matrix-glow);
-        }
-
-        .btn-copy.secondary {
-            border-color: var(--cyan);
-            color: var(--cyan);
-            background: rgba(0, 212, 255, 0.1);
-        }
-
-        .btn-copy.secondary:hover, .btn-copy.secondary:active {
-            background: var(--cyan);
-            color: #000;
-        }
-
-        .control-bar {
-            grid-row: 3;
-            background: linear-gradient(0deg, rgba(0,0,0,0.98) 0%, rgba(0,0,0,0.8) 100%);
-            backdrop-filter: blur(20px);
-            border-top: 1px solid rgba(0, 212, 255, 0.1);
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            padding: 10px;
-            z-index: 100;
-        }
-
-        .control-btn {
-            background: transparent;
-            border: 1px solid transparent;
-            color: var(--signal-dim);
-            padding: 8px 16px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.3s;
-            border-radius: 2px;
-        }
-
-        .control-btn:active {
-            transform: scale(0.95);
-        }
-
-        .control-btn.active {
-            color: var(--cyan);
-            border-color: var(--cyan);
-            background: rgba(0, 212, 255, 0.1);
-        }
-
-        .toast {
-            position: fixed;
-            top: 60px;
-            left: 50%;
-            transform: translateX(-50%) translateY(-100px);
-            background: rgba(0, 0, 0, 0.95);
-            border: 1px solid var(--matrix-green);
-            color: var(--matrix-green);
-            padding: 12px 24px;
-            border-radius: 4px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem;
-            z-index: 10000;
-            opacity: 0;
-            transition: all 0.3s ease;
-            pointer-events: none;
-            box-shadow: 0 0 20px var(--matrix-glow);
-        }
-
-        .toast.show {
-            opacity: 1;
-            transform: translateX(-50%) translateY(0);
-        }
-
-        /* Sprachauswahl */
-        .lang-selector {
-            position: fixed;
-            top: 60px;
-            left: 20px;
-            z-index: 150;
-            display: flex;
-            gap: 5px;
-        }
-
         .lang-btn {
-            background: rgba(0, 0, 0, 0.8);
-            border: 1px solid var(--signal-dim);
-            color: var(--signal-dim);
-            padding: 4px 8px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.65rem;
-            cursor: pointer;
-            border-radius: 3px;
-            backdrop-filter: blur(10px);
+            background: rgba(0,0,0,0.8); border: 1px solid var(--dim); color: var(--dim);
+            padding: 5px 10px; font-family: inherit; font-size: 0.7rem; cursor: pointer;
         }
-
-        .lang-btn.active {
-            border-color: var(--w3w-gold);
-            color: var(--w3w-gold);
-            background: rgba(255, 235, 153, 0.1);
+        .lang-btn.active { border-color: var(--gold); color: var(--gold); }
+        
+        .status-dot {
+            position: fixed; top: 20px; right: 20px; width: 10px; height: 10px;
+            background: var(--green); border-radius: 50%; box-shadow: 0 0 10px var(--green);
+            z-index: 1000; animation: pulse 2s infinite;
         }
-
-        @media (max-width: 768px) {
-            .command-interface { grid-template-rows: 45px 1fr 65px; }
-            .sector-label { min-width: 240px; padding: 12px 15px; }
-            .sector-label .words { font-size: 1rem; }
-            .lang-selector { top: 55px; left: 10px; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        
+        .toast {
+            position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.95); border: 1px solid var(--green); color: var(--green);
+            padding: 10px 20px; font-size: 0.8rem; opacity: 0; transition: opacity 0.3s; z-index: 10000;
+        }
+        .toast.show { opacity: 1; }
+        
+        #gridCanvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 5; opacity: 0; transition: opacity 0.3s; }
+        #gridCanvas.visible { opacity: 1; }
+        
+        .hint {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); border: 1px solid var(--cyan); color: var(--cyan);
+            padding: 8px 16px; font-size: 0.7rem; border-radius: 20px; pointer-events: none; opacity: 0.8;
         }
     </style>
 </head>
 <body>
 
-<div class="watermark-container">
-    <div class="watermark-text">ரா சுவாதி</div>
-</div>
-<div class="watermark-timestamp">2026-03-11T20:45:00Z</div>
+<div class="scan-line"></div>
+<div class="status-dot" id="statusDot"></div>
+<div class="toast" id="toast"></div>
 
-<div class="scanner-bg"></div>
-<div class="toast" id="toast">COORDINATES COPIED</div>
-
-<!-- Sprachauswahl für w3w -->
-<div class="lang-selector" id="langSelector">
-    <button class="lang-btn active" data-lang="de" title="Deutsch">DE</button>
-    <button class="lang-btn" data-lang="en" title="English">EN</button>
-    <button class="lang-btn" data-lang="fr" title="Français">FR</button>
-    <button class="lang-btn" data-lang="es" title="Español">ES</button>
+<div class="lang-bar">
+    <button class="lang-btn active" onclick="setLang('de')">DE</button>
+    <button class="lang-btn" onclick="setLang('en')">EN</button>
+    <button class="lang-btn" onclick="setLang('fr')">FR</button>
+    <button class="lang-btn" onclick="setLang('es')">ES</button>
 </div>
 
-<div class="command-interface">
+<div id="map"></div>
+<canvas id="gridCanvas"></canvas>
 
-    <header class="status-header">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <div class="pulse-dot" id="pulseDot"></div>
-            <span style="color: var(--matrix-green); font-size: 0.85rem; font-weight: 600;" id="headerTitle">SPECTER</span>
-        </div>
-
-        <div class="grid-status active" id="gridStatus">
-            PRECISION GRID + W3W INTEGRATION
-        </div>
-
-        <div style="font-family: 'JetBrains Mono'; font-size: 0.8rem; color: var(--signal-dim);">
-            ZOOM: <span id="zoomLevel" style="color: var(--signal-white);">--</span>
-        </div>
-    </header>
-
-    <main class="map-zone" id="mapZone">
-        <div id="map"></div>
-        <canvas id="gridCanvas"></canvas>
-
-        <div id="sectorLabel" class="sector-label">
-            <div class="words" id="labelWords">ALPHA.TIGER.NORTH</div>
-            
-            <!-- NEU: what3words Display -->
-            <div class="w3w-display" id="w3wDisplay">
-                <span class="label">what3words</span>
-                <span id="w3wWords">///laden.von.adresse</span>
-            </div>
-
-            <div class="coords-display" id="permCoords">
-                6.0329, 80.2168
-            </div>
-            
-            <div class="meta">
-                <span id="accuracy">ACC: ±44m</span>
-                <span id="w3wStatus" style="color: var(--w3w-gold);">W3W: --</span>
-            </div>
-
-            <div class="actions">
-                <button class="btn-copy" id="btnCopy">COPY</button>
-                <button class="btn-copy secondary" id="btnCopyW3W" style="display:none;">COPY W3W</button>
-                <button class="btn-copy" id="btnShare">SHARE</button>
-            </div>
-        </div>
-    </main>
-
-    <nav class="control-bar">
-        <button class="control-btn active" id="btnReset">Reset</button>
-        <button class="control-btn" id="btnZoomIn">+ Zoom</button>
-        <button class="control-btn" id="btnZoomOut">- Zoom</button>
-        <button class="control-btn" id="btnLocate">LOCATE</button>
-        <button class="control-btn" id="btnClear">Clear</button>
-    </nav>
+<div class="sector-card" id="sectorCard">
+    <div class="specter-code" id="specterCode">ALPHA.TIGER.NORTH</div>
+    
+    <div class="w3w-box" id="w3wBox">
+        <span class="w3w-label">what3words</span>
+        <span class="w3w-words" id="w3wWords">///laden.von.server</span>
+    </div>
+    
+    <div class="coords" id="coordsDisplay" onclick="copyCoords()">0.000000, 0.000000</div>
+    
+    <div class="meta">
+        <span id="accuracy">±44m</span>
+        <span id="w3wStatus">SYNC...</span>
+    </div>
+    
+    <div class="actions">
+        <button onclick="copySpecter()">COPY</button>
+        <button class="w3w-btn" id="btnCopyW3W" onclick="copyW3W()">COPY W3W</button>
+        <button onclick="openMaps()">MAPS</button>
+    </div>
 </div>
+
+<div class="hint">HOLD für Sektor • Sprache oben links wählen</div>
 
 <script>
-    // === KONFIGURATION ===
-    const CONFIG = {
-        SECTOR_SIZE: 0.0004,
-        GRID_ZOOM: 19,
-        LONG_PRESS_DURATION: 600,
-        DEFAULT_CENTER: [6.0329, 80.2168],
-        DEFAULT_ZOOM: 13,
-        // Passe dies an deinen Server an:
-        W3W_PROXY_URL: 'http://localhost:3000/api/sector-w3w',
-        STORAGE_KEY: 'specter_events_v1'
-    };
+// Konfiguration
+const CONFIG = {
+    SECTOR_SIZE: 0.0004,
+    GRID_ZOOM: 19,
+    LONG_PRESS: 800,
+    PROXY_URL: 'http://localhost:3000/api/sector-w3w', // Dein lokaler Server
+    DEFAULT_POS: [52.520008, 13.404954] // Berlin
+};
 
-    const DICTS = {
-        alpha: ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL', 'INDIA', 'JULIET', 'KILO', 'LIMA'],
-        beta: ['TIGER', 'WOLF', 'VIPER', 'EAGLE', 'SHARK', 'RAVEN', 'FALCON', 'LION', 'BEAR', 'HAWK', 'JAGUAR', 'COBRA'],
-        gamma: ['PRIME', 'CORE', 'BASE', 'POINT', 'ZONE', 'SECTOR', 'NODE', 'HUB', 'PORT', 'CENTER', 'NEXUS', 'ZERO']
-    };
+// State
+let state = {
+    map: null,
+    sector: null,
+    coords: null,
+    w3w: null,
+    lang: 'de',
+    holding: false,
+    timer: null
+};
 
-    // === STATE ===
-    let state = {
-        isGridActive: true,
-        selectedSector: null,
-        currentWords: '',
-        currentCoords: null,
-        currentW3W: null, // NEU: what3words speichern
-        w3wLanguage: 'de', // NEU: aktuelle Sprache
-        touchStartTime: 0,
-        touchStartPos: { x: 0, y: 0 },
-        longPressTimer: null,
-        isLongPress: false,
-        isHolding: false,
-        canvasReady: false
-    };
+// Wortlisten für SPECTER-Codes
+const WORDS = {
+    a: ['ALPHA','BRAVO','CHARLIE','DELTA','ECHO','FOXTROT','GOLF','HOTEL','INDIA','JULIET','KILO','LIMA'],
+    b: ['TIGER','WOLF','VIPER','EAGLE','SHARK','RAVEN','FALCON','LION','BEAR','HAWK','JAGUAR','COBRA'],
+    c: ['PRIME','CORE','BASE','POINT','ZONE','SECTOR','NODE','HUB','PORT','CENTER','NEXUS','ZERO']
+};
 
-    // === MAP INIT ===
-    const map = L.map('map', {
-        zoomControl: false,
-        attributionControl: false,
-        center: CONFIG.DEFAULT_CENTER,
-        zoom: CONFIG.DEFAULT_ZOOM,
-        minZoom: 3,
-        maxZoom: 22,
-        doubleClickZoom: false,
-        bounceAtZoomLimits: false,
-        preferCanvas: true
-    });
+// Init Map
+state.map = L.map('map', { zoomControl: false, attributionControl: false }).setView(CONFIG.DEFAULT_POS, 13);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 22, opacity: 0.7 }).addTo(state.map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 22,
-        opacity: 0.7,
-        subdomains: 'abcd'
-    }).addTo(map);
+// Canvas für Grid
+const canvas = document.getElementById('gridCanvas');
+const ctx = canvas.getContext('2d');
 
-    // === NEU: what3words Funktionen ===
+function resizeCanvas() {
+    const rect = document.getElementById('map').getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    canvas.style.width = rect.width + 'px'; canvas.style.height = rect.height + 'px';
+    drawGrid();
+}
+window.addEventListener('resize', resizeCanvas);
+setTimeout(resizeCanvas, 100);
 
-    // Sprachauswahl
-    document.querySelectorAll('.lang-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            state.w3wLanguage = btn.dataset.lang;
-            showToast(`W3W LANGUAGE: ${state.w3wLanguage.toUpperCase()}`);
-            
-            // Wenn gerade ein Sektor aktiv ist, w3w neu laden
-            if (state.currentCoords) {
-                fetchW3WForSector(state.currentCoords[0], state.currentCoords[1], true);
-            }
-        });
-    });
-
-    async function fetchW3WForSector(lat, lng, force = false) {
-        // Zeige Ladezustand
-        const w3wDisplay = document.getElementById('w3wDisplay');
-        const w3wWords = document.getElementById('w3wWords');
-        const w3wStatus = document.getElementById('w3wStatus');
-        const btnCopyW3W = document.getElementById('btnCopyW3W');
-        
-        if (!force && state.currentW3W) return; // Bereits geladen
-        
-        w3wDisplay.classList.add('loading');
-        w3wDisplay.classList.add('visible');
-        w3wWords.textContent = 'resolving...';
-        w3wStatus.textContent = 'W3W: SYNC...';
-        btnCopyW3W.style.display = 'none';
-        
-        try {
-            // Timeout nach 5 Sekunden
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            
-            const url = `${CONFIG.W3W_PROXY_URL}?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&lang=${state.w3wLanguage}`;
-            
-            const response = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const data = await response.json();
-            
-            if (data && data.words) {
-                state.currentW3W = data.words;
-                w3wWords.textContent = `///${data.words}`;
-                w3wStatus.textContent = `W3W: ${state.w3wLanguage.toUpperCase()}`;
-                w3wStatus.style.color = 'var(--w3w-gold)';
-                btnCopyW3W.style.display = 'block';
-                
-                // Animation für erfolgreiches Laden
-                w3wDisplay.classList.remove('loading');
-                triggerHaptic([50]);
-            } else {
-                throw new Error('No words in response');
-            }
-        } catch (err) {
-            console.warn('W3W fetch failed:', err);
-            w3wWords.textContent = 'offline / unavailable';
-            w3wStatus.textContent = 'W3W: OFFLINE';
-            w3wStatus.style.color = 'var(--signal-dim)';
-            state.currentW3W = null;
-            w3wDisplay.classList.remove('loading');
-        }
+function drawGrid() {
+    if (state.map.getZoom() < CONFIG.GRID_ZOOM) {
+        canvas.classList.remove('visible'); return;
     }
-
-    // === BESTEHENDE FUNKTIONEN (angepasst) ===
-
-    function generateWords(lat, lng) {
-        const normLat = ((lat % 90) + 90) % 90;
-        const normLng = ((lng % 180) + 180) % 180;
-        const hash = Math.abs(Math.floor((normLat * 10000) * (normLng * 10000) * 997)) % 10000;
-        return `${DICTS.alpha[hash % 12]}.${DICTS.beta[(hash >> 4) % 12]}.${DICTS.gamma[(hash >> 8) % 12]}`;
-    }
-
-    function getSectorBounds(lat, lng) {
-        const latSector = Math.floor(lat / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-        const lngSector = Math.floor(lng / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-        return {
-            north: latSector + CONFIG.SECTOR_SIZE,
-            south: latSector,
-            east: lngSector + CONFIG.SECTOR_SIZE,
-            west: lngSector,
-            centerLat: latSector + (CONFIG.SECTOR_SIZE / 2),
-            centerLng: lngSector + (CONFIG.SECTOR_SIZE / 2)
-        };
-    }
-
-    function formatCoords(lat, lng) {
-        return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-    }
-
-    // === CANVAS & GRID ===
-    const canvas = document.getElementById('gridCanvas');
-    const ctx = canvas.getContext('2d');
-
-    function initCanvas() {
-        const rect = document.getElementById('mapZone').getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) {
-            setTimeout(initCanvas, 100);
-            return;
-        }
-        const ratio = window.devicePixelRatio || 1;
-        canvas.width = rect.width * ratio;
-        canvas.height = rect.height * ratio;
-        canvas.style.width = rect.width + 'px';
-        canvas.style.height = rect.height + 'px';
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(ratio, ratio);
-        state.canvasReady = true;
-        checkAndDrawGrid();
-    }
-
-    function checkAndDrawGrid() {
-        const zoom = map.getZoom();
-        document.getElementById('zoomLevel').textContent = zoom;
-        
-        if (!state.canvasReady) return;
-        
-        if (state.isGridActive && zoom >= CONFIG.GRID_ZOOM) {
-            document.getElementById('gridCanvas').classList.add('visible');
-            drawGrid();
-        } else {
-            document.getElementById('gridCanvas').classList.remove('visible');
-            clearCanvas();
-        }
-    }
-
-    function drawGrid() {
-        if (!state.isGridActive || !state.canvasReady) return;
-        const rect = document.getElementById('mapZone').getBoundingClientRect();
-        const width = rect.width;
-        const height = rect.height;
-        ctx.clearRect(0, 0, width, height);
-
-        const bounds = map.getBounds();
-        const startLat = Math.floor(bounds.getSouth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-        const endLat = Math.ceil(bounds.getNorth() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-        const startLng = Math.floor(bounds.getWest() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-        const endLng = Math.ceil(bounds.getEast() / CONFIG.SECTOR_SIZE) * CONFIG.SECTOR_SIZE;
-
-        ctx.strokeStyle = 'rgba(0, 212, 255, 0.4)';
-        ctx.lineWidth = 1.0;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = 'rgba(0, 212, 255, 0.3)';
-
-        ctx.beginPath();
-        for (let lng = startLng; lng <= endLng; lng += CONFIG.SECTOR_SIZE) {
-            const start = map.latLngToContainerPoint([bounds.getNorth(), lng]);
-            const end = map.latLngToContainerPoint([bounds.getSouth(), lng]);
-            ctx.moveTo(start.x, start.y);
-            ctx.lineTo(end.x, end.y);
-        }
-        for (let lat = startLat; lat <= endLat; lat += CONFIG.SECTOR_SIZE) {
-            const start = map.latLngToContainerPoint([lat, bounds.getWest()]);
-            const end = map.latLngToContainerPoint([lat, bounds.getEast()]);
-            ctx.moveTo(start.x, start.y);
-            ctx.lineTo(end.x, end.y);
-        }
-        ctx.stroke();
-    }
-
-    function clearCanvas() {
-        const rect = document.getElementById('mapZone').getBoundingClientRect();
-        ctx.clearRect(0, 0, rect.width, rect.height);
-    }
-
-    map.on('zoomend moveend', checkAndDrawGrid);
-
-    // === TOUCH LOGIC (angepasst für async) ===
-    const mapZone = document.getElementById('mapZone');
-
-    function triggerHaptic(pattern) {
-        if (navigator.vibrate) navigator.vibrate(pattern);
-    }
-
-    function showToast(msg) {
-        const t = document.getElementById('toast');
-        t.textContent = msg;
-        t.classList.add('show');
-        setTimeout(() => t.classList.remove('show'), 2000);
-    }
-
-    async function handleSectorSelection(lat, lng) {
-        // 1. Eigenes System sofort anzeigen (nicht blockieren)
-        const sector = getSectorBounds(lat, lng);
-        state.selectedSector = sector;
-        state.currentWords = generateWords(sector.centerLat, sector.centerLng);
-        state.currentCoords = [sector.centerLat, sector.centerLng];
-        state.currentW3W = null; // Reset
-
-        const label = document.getElementById('sectorLabel');
-        document.getElementById('labelWords').textContent = state.currentWords;
-        document.getElementById('permCoords').textContent = formatCoords(sector.centerLat, sector.centerLng);
-        document.getElementById('accuracy').textContent = `ACC: ±${Math.round(CONFIG.SECTOR_SIZE * 111000)}m`;
-        document.getElementById('w3wStatus').textContent = 'W3W: SYNC...';
-        document.getElementById('w3wStatus').style.color = 'var(--signal-dim)';
-        document.getElementById('btnCopyW3W').style.display = 'none';
-        
-        // W3W Display zurücksetzen
-        const w3wDisplay = document.getElementById('w3wDisplay');
-        w3wDisplay.classList.remove('visible');
-        w3wDisplay.classList.remove('loading');
-
-        const centerPoint = map.latLngToContainerPoint([sector.centerLat, sector.centerLng]);
-        label.style.left = centerPoint.x + 'px';
-        label.style.top = centerPoint.y + 'px';
-        label.classList.add('visible');
-
-        // 2. what3words asynchron im Hintergrund laden
-        // Kurze Verzögerung, damit die UI zuerst rendered
-        setTimeout(() => {
-            fetchW3WForSector(sector.centerLat, sector.centerLng);
-        }, 300);
-    }
-
-    function startLongPress(e) {
-        if (!state.isGridActive || map.getZoom() < CONFIG.GRID_ZOOM) return;
-
-        const touch = e.touches[0];
-        state.touchStartPos = { x: touch.clientX, y: touch.clientY };
-        state.touchStartTime = Date.now();
-        state.isHolding = true;
-        state.isLongPress = false;
-
-        map.dragging.disable();
-
-        state.longPressTimer = setTimeout(async () => {
-            state.isLongPress = true;
-            state.isHolding = false;
-            
-            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
-            if (!latlng || isNaN(latlng.lat)) return;
-            
-            await handleSectorSelection(latlng.lat, latlng.lng);
-            triggerHaptic([50, 30]);
-        }, CONFIG.LONG_PRESS_DURATION);
-    }
-
-    function moveLongPress(e) {
-        if (!state.isHolding) return;
-        const touch = e.touches[0];
-        const dx = touch.clientX - state.touchStartPos.x;
-        const dy = touch.clientY - state.touchStartPos.y;
-        if (Math.sqrt(dx*dx + dy*dy) > 20) {
-            cancelLongPress();
-            map.dragging.enable();
-        }
-    }
-
-    function endLongPress(e) {
-        const wasLongPress = state.isLongPress;
-        cancelLongPress();
-        map.dragging.enable();
-        
-        if (!wasLongPress && state.isHolding) {
-            // Kurzer Tap - Sektor auswählen ohne Long-Press
-            const touch = e.changedTouches[0];
-            const latlng = map.containerPointToLatLng(L.point(touch.clientX, touch.clientY));
-            if (latlng && !isNaN(latlng.lat)) {
-                handleSectorSelection(latlng.lat, latlng.lng);
-            }
-        }
-    }
-
-    function cancelLongPress() {
-        state.isHolding = false;
-        clearTimeout(state.longPressTimer);
-    }
-
-    // Event Wiring
-    mapZone.addEventListener('touchstart', startLongPress, { passive: true });
-    mapZone.addEventListener('touchmove', moveLongPress, { passive: true });
-    mapZone.addEventListener('touchend', endLongPress, { passive: false });
-    mapZone.addEventListener('touchcancel', () => {
-        cancelLongPress();
-        map.dragging.enable();
-    });
-
-    // Mouse Support für Desktop
-    mapZone.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        const touch = { clientX: e.clientX, clientY: e.clientY };
-        startLongPress({ touches: [touch] });
-        
-        const mouseMove = (ev) => {
-            moveLongPress({ touches: [{ clientX: ev.clientX, clientY: ev.clientY }] });
-        };
-        const mouseUp = async (ev) => {
-            document.removeEventListener('mousemove', mouseMove);
-            document.removeEventListener('mouseup', mouseUp);
-            
-            // Manuelle Prüfung für Desktop-Click
-            const duration = Date.now() - state.touchStartTime;
-            if (duration < CONFIG.LONG_PRESS_DURATION) {
-                const latlng = map.containerPointToLatLng(L.point(ev.clientX, ev.clientY));
-                if (latlng) await handleSectorSelection(latlng.lat, latlng.lng);
-            }
-            
-            endLongPress({ changedTouches: [{ clientX: ev.clientX, clientY: ev.clientY }] });
-        };
-        document.addEventListener('mousemove', mouseMove);
-        document.addEventListener('mouseup', mouseUp);
-    });
-
-    // === BUTTON ACTIONS ===
-
-    function clearSelection() {
-        state.selectedSector = null;
-        state.currentWords = '';
-        state.currentCoords = null;
-        state.currentW3W = null;
-        document.getElementById('sectorLabel').classList.remove('visible');
-        document.getElementById('w3wDisplay').classList.remove('visible');
-    }
-
-    function resetView() {
-        map.setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
-        clearSelection();
-    }
-
-    function copySectorData() {
-        if (!state.currentCoords) {
-            showToast('NO SECTOR SELECTED');
-            return;
-        }
-        const data = `${state.currentWords} :: ${formatCoords(state.currentCoords[0], state.currentCoords[1])}`;
-        
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(data).then(() => showToast('SPECTER CODE COPIED'));
-        }
-    }
-
-    function copyW3W() {
-        if (!state.currentW3W) {
-            showToast('NO W3W DATA');
-            return;
-        }
-        const text = `///${state.currentW3W}`;
-        
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(text).then(() => showToast('W3W COPIED'));
-        }
-    }
-
-    function shareSector() {
-        if (!state.currentCoords) {
-            showToast('NO SECTOR SELECTED');
-            return;
-        }
-        
-        let text = `${state.currentWords} :: ${formatCoords(state.currentCoords[0], state.currentCoords[1])}`;
-        if (state.currentW3W) {
-            text += `\n///${state.currentW3W}`;
-        }
-        const url = `https://www.google.com/maps?q=${state.currentCoords[0]},${state.currentCoords[1]}&z=19&t=k`;
-
-        if (navigator.share) {
-            navigator.share({ title: 'SPECTER SECTOR', text: text, url: url })
-                .catch(() => showToast('SHARE CANCELLED'));
-        } else {
-            navigator.clipboard.writeText(text + '\n' + url).then(() => showToast('FULL DATA COPIED'));
-        }
-    }
-
-    // Controls
-    document.getElementById('btnCopy').addEventListener('click', copySectorData);
-    document.getElementById('btnCopyW3W').addEventListener('click', copyW3W);
-    document.getElementById('btnShare').addEventListener('click', shareSector);
-    document.getElementById('btnReset').addEventListener('click', resetView);
-    document.getElementById('btnZoomIn').addEventListener('click', () => map.zoomIn());
-    document.getElementById('btnZoomOut').addEventListener('click', () => map.zoomOut());
-    document.getElementById('btnClear').addEventListener('click', clearSelection);
+    canvas.classList.add('visible');
+    const b = state.map.getBounds();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.strokeStyle = 'rgba(0,212,255,0.3)'; ctx.lineWidth = 1;
     
-    document.getElementById('btnLocate').addEventListener('click', () => {
-        if (!navigator.geolocation) {
-            showToast('GPS NOT SUPPORTED');
-            return;
-        }
-        
-        const dot = document.getElementById('pulseDot');
-        dot.style.background = '#0080ff';
-        dot.style.boxShadow = '0 0 10px #0080ff';
-        showToast('ACQUIRING SIGNAL...');
-        
-        navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                const { latitude, longitude } = pos.coords;
-                map.setView([latitude, longitude], 18);
-                handleSectorSelection(latitude, longitude);
-                dot.style.background = '';
-                dot.style.boxShadow = '';
-                showToast('POSITION ACQUIRED');
-            },
-            (err) => {
-                dot.style.background = '';
-                dot.style.boxShadow = '';
-                showToast('GPS ERROR');
-            },
-            { enableHighAccuracy: true, timeout: 10000 }
-        );
-    });
-
-    // Init
-    window.addEventListener('load', () => {
-        setTimeout(() => {
-            initCanvas();
-            document.getElementById('zoomLevel').textContent = map.getZoom();
-        }, 100);
-    });
+    const s = CONFIG.SECTOR_SIZE;
+    const latStart = Math.floor(b.getSouth()/s)*s;
+    const lngStart = Math.floor(b.getWest()/s)*s;
     
-    window.addEventListener('resize', () => {
-        setTimeout(() => {
-            const rect = document.getElementById('mapZone').getBoundingClientRect();
-            const ratio = window.devicePixelRatio || 1;
-            canvas.width = rect.width * ratio;
-            canvas.height = rect.height * ratio;
-            canvas.style.width = rect.width + 'px';
-            canvas.style.height = rect.height + 'px';
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.scale(ratio, ratio);
-            checkAndDrawGrid();
-        }, 100);
-    });
+    for(let lat=latStart; lat<=b.getNorth(); lat+=s) {
+        const p1 = state.map.latLngToContainerPoint([lat,b.getWest()]);
+        const p2 = state.map.latLngToContainerPoint([lat,b.getEast()]);
+        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+    }
+    for(let lng=lngStart; lng<=b.getEast(); lng+=s) {
+        const p1 = state.map.latLngToContainerPoint([b.getSouth(),lng]);
+        const p2 = state.map.latLngToContainerPoint([b.getNorth(),lng]);
+        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+    }
+}
+state.map.on('move zoom', drawGrid);
+
+// Generiere SPECTER-Code
+function genSpecter(lat,lng) {
+    const h = Math.abs(Math.floor((lat*10000)*(lng*10000)*997))%10000;
+    return `${WORDS.a[h%12]}.${WORDS.b[(h>>4)%12]}.${WORDS.c[(h>>8)%12]}`;
+}
+
+// what3words Laden
+async function loadW3W(lat, lng) {
+    const box = document.getElementById('w3wBox');
+    const words = document.getElementById('w3wWords');
+    const status = document.getElementById('w3wStatus');
+    const btn = document.getElementById('btnCopyW3W');
+    
+    box.classList.add('visible', 'loading');
+    words.textContent = '///resolving...';
+    status.textContent = 'SYNC...';
+    btn.classList.remove('visible');
+    state.w3w = null;
+    
+    try {
+        const url = `${CONFIG.PROXY_URL}?lat=${lat}&lng=${lng}&lang=${state.lang}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        
+        if (!res.ok) throw new Error('API Error');
+        const data = await res.json();
+        
+        if (data.words) {
+            state.w3w = data.words;
+            words.textContent = `///${data.words}`;
+            status.textContent = `W3W:${state.lang.toUpperCase()}`;
+            status.style.color = 'var(--gold)';
+            box.classList.remove('loading');
+            btn.classList.add('visible');
+            showToast('W3W RESOLVED');
+        }
+    } catch(e) {
+        words.textContent = '///offline';
+        status.textContent = 'OFFLINE';
+        status.style.color = 'var(--dim)';
+        box.classList.remove('loading');
+    }
+}
+
+// Touch Handling
+const mapEl = document.getElementById('map');
+
+function onTouchStart(e) {
+    if (state.map.getZoom() < CONFIG.GRID_ZOOM) return;
+    state.holding = true;
+    const t = e.touches[0];
+    
+    state.timer = setTimeout(() => {
+        state.holding = false;
+        const pt = state.map.containerPointToLatLng(L.point(t.clientX, t.clientY));
+        selectSector(pt.lat, pt.lng);
+        if(navigator.vibrate) navigator.vibrate(50);
+    }, CONFIG.LONG_PRESS);
+}
+
+function onTouchMove(e) {
+    if (!state.holding) return;
+    // Abbruch bei zu großer Bewegung
+    // (Vereinfacht für dieses Beispiel)
+}
+
+function onTouchEnd() {
+    state.holding = false;
+    clearTimeout(state.timer);
+}
+
+mapEl.addEventListener('touchstart', onTouchStart, {passive:true});
+mapEl.addEventListener('touchmove', onTouchMove, {passive:true});
+mapEl.addEventListener('touchend', onTouchEnd);
+mapEl.addEventListener('touchcancel', onTouchEnd);
+
+// Maus-Unterstützung
+mapEl.addEventListener('mousedown', (e) => {
+    onTouchStart({touches:[{clientX:e.clientX, clientY:e.clientY}]});
+});
+mapEl.addEventListener('mouseup', onTouchEnd);
+
+// Sektor auswählen
+function selectSector(lat, lng) {
+    const s = CONFIG.SECTOR_SIZE;
+    const latS = Math.floor(lat/s)*s;
+    const lngS = Math.floor(lng/s)*s;
+    
+    state.sector = {
+        n: latS+s, s: latS, e: lngS+s, w: lngS,
+        cLat: latS+s/2, cLng: lngS+s/2
+    };
+    
+    // UI Update
+    const card = document.getElementById('sectorCard');
+    document.getElementById('specterCode').textContent = genSpecter(state.sector.cLat, state.sector.cLng);
+    document.getElementById('coordsDisplay').textContent = `${state.sector.cLat.toFixed(6)}, ${state.sector.cLng.toFixed(6)}`;
+    
+    card.classList.add('visible');
+    
+    // W3W laden
+    loadW3W(state.sector.cLat, state.sector.cLng);
+}
+
+// Sprache wechseln
+function setLang(l) {
+    state.lang = l;
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    if (state.sector) {
+        loadW3W(state.sector.cLat, state.sector.cLng);
+    }
+    showToast(`LANGUAGE: ${l.toUpperCase()}`);
+}
+
+// Actions
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function copySpecter() {
+    if (!state.sector) return;
+    const text = document.getElementById('specterCode').textContent;
+    navigator.clipboard.writeText(text).then(() => showToast('SPECTER COPIED'));
+}
+
+function copyW3W() {
+    if (!state.w3w) return;
+    navigator.clipboard.writeText(`///${state.w3w}`).then(() => showToast('W3W COPIED'));
+}
+
+function copyCoords() {
+    if (!state.sector) return;
+    navigator.clipboard.writeText(document.getElementById('coordsDisplay').textContent)
+        .then(() => showToast('COORDS COPIED'));
+}
+
+function openMaps() {
+    if (!state.sector) return;
+    const url = `https://www.google.com/maps?q=${state.sector.cLat},${state.sector.cLng}&z=20&t=k`;
+    window.open(url, '_blank');
+}
+
+// Karte anklicken = Card schließen
+document.getElementById('sectorCard').addEventListener('click', (e) => e.stopPropagation());
+document.getElementById('map').addEventListener('click', () => {
+    document.getElementById('sectorCard').classList.remove('visible');
+});
 </script>
 </body>
 </html>
